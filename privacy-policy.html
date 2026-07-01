@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Doc Copilot Privacy Policy</title>
+    <meta
+      name="description"
+      content="Privacy policy for the Doc Copilot Chrome extension."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8fb;
+        --panel: #ffffff;
+        --text: #182033;
+        --muted: #5d667a;
+        --line: #dfe4ee;
+        --accent: #1768e5;
+        --soft: #edf4ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.65;
+      }
+
+      main {
+        width: min(880px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0 72px;
+      }
+
+      article {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 36px;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.25;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 34px;
+      }
+
+      h2 {
+        margin: 34px 0 10px;
+        font-size: 20px;
+      }
+
+      p {
+        margin: 0 0 14px;
+      }
+
+      ul {
+        margin: 0 0 16px 22px;
+        padding: 0;
+      }
+
+      li {
+        margin: 8px 0;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .notice {
+        margin: 22px 0;
+        padding: 14px 16px;
+        border: 1px solid #bfd7ff;
+        border-radius: 6px;
+        background: var(--soft);
+      }
+
+      .back {
+        display: inline-block;
+        margin-bottom: 18px;
+        color: var(--accent);
+        font-weight: 650;
+        text-decoration: none;
+      }
+
+      .back:hover {
+        text-decoration: underline;
+      }
+
+      @media (max-width: 640px) {
+        main {
+          width: min(100% - 24px, 880px);
+          padding-top: 24px;
+        }
+
+        article {
+          padding: 24px;
+        }
+
+        h1 {
+          font-size: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="./">Doc Copilot</a>
+      <article>
+        <h1>Doc Copilot Privacy Policy</h1>
+        <p class="muted">Effective date: July 1, 2026</p>
+
+        <div class="notice">
+          <p>
+            Doc Copilot does not operate a developer-owned backend service for
+            AI processing. When you use AI features, the extension sends the
+            relevant content directly from your browser to the AI API endpoint
+            that you configure in the extension settings.
+          </p>
+        </div>
+
+        <h2>Overview</h2>
+        <p>
+          Doc Copilot is a Chrome extension that helps users write, rewrite,
+          review, discuss, and export content in supported web document editors
+          and publishing pages.
+        </p>
+        <p>
+          This policy explains what data the extension processes, why it
+          processes that data, where the data is stored, and how data may be
+          sent to third-party AI providers selected by the user.
+        </p>
+
+        <h2>Data the extension processes</h2>
+        <p>
+          Depending on the feature you use, Doc Copilot may process the
+          following data:
+        </p>
+        <ul>
+          <li>
+            Page and document content, including visible text from supported
+            editors, read-only pages, articles, or selected reference pages.
+          </li>
+          <li>
+            Selected text, cursor-adjacent text, document title, page URL, and
+            other page context needed to produce autocomplete, rewrite, review,
+            and chat responses.
+          </li>
+          <li>
+            Text that you type into Doc Copilot chat, prompt, rewrite, review,
+            or settings fields.
+          </li>
+          <li>
+            Optional images or image references that you explicitly add to an AI
+            chat or generation workflow.
+          </li>
+          <li>
+            Extension settings, including AI API base URL, API key, model ID,
+            feature toggles, prompt settings, and usage counters.
+          </li>
+          <li>
+            Local chat history and pinned reference content when those features
+            are enabled or used.
+          </li>
+          <li>
+            PDF data generated locally by Chrome when you use the export or save
+            workflow.
+          </li>
+        </ul>
+
+        <h2>How the data is used</h2>
+        <p>Doc Copilot uses processed data only to provide extension features:</p>
+        <ul>
+          <li>Generating autocomplete suggestions and ghost text.</li>
+          <li>Rewriting, polishing, translating, or fixing selected text.</li>
+          <li>Reviewing document content and producing edit suggestions.</li>
+          <li>Answering questions about the current document or page.</li>
+          <li>Saving user settings, local chat sessions, and pinned references.</li>
+          <li>Generating local PDF exports when requested by the user.</li>
+        </ul>
+        <p>
+          Doc Copilot does not use user data for advertising, user profiling,
+          credit evaluation, resale, or unrelated analytics.
+        </p>
+
+        <h2>AI API providers</h2>
+        <p>
+          Doc Copilot requires the user to configure an OpenAI-compatible API
+          base URL, API key, and model ID before AI features can be used. When
+          you use AI features, the extension sends the relevant prompt,
+          document context, selected text, chat messages, and optional images to
+          that configured API endpoint.
+        </p>
+        <p>
+          The configured AI provider may process, store, or log the submitted
+          data according to that provider's own terms and privacy policy. Users
+          should only configure AI providers they trust and should avoid sending
+          content that they are not permitted to share with that provider.
+        </p>
+
+        <h2>Local storage</h2>
+        <p>
+          Doc Copilot stores settings in Chrome extension storage on the user's
+          device. Chat history and pinned references may be stored locally in
+          browser IndexedDB. Token usage counters may be stored in browser
+          storage. These records are used to restore extension state and provide
+          local history features.
+        </p>
+        <p>
+          The developer does not receive local storage records unless a user
+          separately chooses to share them for support or debugging.
+        </p>
+
+        <h2>Data sharing</h2>
+        <p>
+          Doc Copilot does not sell user data. Doc Copilot does not share user
+          data with the developer's own server for AI processing because no such
+          server is operated for this purpose.
+        </p>
+        <p>
+          User data may be sent to the AI API provider configured by the user
+          when AI features are used. Data may also be handled by Chrome and the
+          browser platform as necessary for extension storage, context menus,
+          downloads, and page export workflows.
+        </p>
+
+        <h2>Permissions</h2>
+        <p>Doc Copilot uses Chrome extension permissions for these purposes:</p>
+        <ul>
+          <li>
+            <strong>Host permissions:</strong> to run on supported document,
+            editor, article, and publishing websites.
+          </li>
+          <li>
+            <strong>activeTab:</strong> to interact with the current active page
+            when the user invokes extension features.
+          </li>
+          <li>
+            <strong>storage:</strong> to save settings, feature preferences, and
+            local usage state.
+          </li>
+          <li>
+            <strong>contextMenus:</strong> to provide right-click actions for
+            selected text and page review.
+          </li>
+          <li>
+            <strong>debugger:</strong> to call Chrome's Page.printToPDF
+            capability for user-requested PDF export, then detach from the page.
+          </li>
+          <li>
+            <strong>downloads:</strong> to save generated PDF files to the
+            user's device.
+          </li>
+        </ul>
+
+        <h2>User controls</h2>
+        <p>Users can control their data by:</p>
+        <ul>
+          <li>Editing or removing model API settings in the extension panel.</li>
+          <li>Disabling optional history features where available.</li>
+          <li>Deleting local chat sessions and pinned references where available.</li>
+          <li>Clearing extension storage from Chrome settings.</li>
+          <li>Uninstalling the extension to remove extension-controlled local data.</li>
+        </ul>
+
+        <h2>Security</h2>
+        <p>
+          Doc Copilot is designed to send AI requests only to the API endpoint
+          configured by the user. Users should configure HTTPS endpoints and
+          protect their API keys. No method of local or network storage is
+          perfectly secure, so users should avoid submitting highly sensitive
+          content to untrusted AI providers.
+        </p>
+
+        <h2>Children's privacy</h2>
+        <p>
+          Doc Copilot is not directed to children. The extension is intended for
+          productivity and document workflows.
+        </p>
+
+        <h2>Changes to this policy</h2>
+        <p>
+          This policy may be updated when Doc Copilot changes how it processes
+          data or adds new features. The effective date at the top of the page
+          will be updated when material changes are made.
+        </p>
+
+        <h2>Contact</h2>
+        <p>
+          For privacy questions about Doc Copilot, please contact the developer
+          using the support contact shown on the Doc Copilot Chrome Web Store
+          listing.
+        </p>
+      </article>
+    </main>
+  </body>
+</html>
