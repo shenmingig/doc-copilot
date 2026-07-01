@@ -91,6 +91,28 @@
         background: var(--soft);
       }
 
+      .language-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 18px 0 26px;
+      }
+
+      .language-nav a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        text-decoration: none;
+      }
+
+      .language-nav a:hover {
+        border-color: #abc9ff;
+        background: #f7fbff;
+      }
+
       .back {
         display: inline-block;
         margin-bottom: 18px;
@@ -124,7 +146,15 @@
       <a class="back" href="./">Doc Copilot</a>
       <article>
         <h1>Doc Copilot Privacy Policy</h1>
-        <p class="muted">Effective date: July 1, 2026</p>
+        <p class="muted">Effective date: July 1, 2026 / 生效日期：2026 年 7 月 1 日</p>
+
+        <nav class="language-nav" aria-label="Language sections">
+          <a href="#english">English</a>
+          <a href="#chinese">中文</a>
+        </nav>
+
+        <section id="english" lang="en">
+        <h2>English</h2>
 
         <div class="notice">
           <p>
@@ -307,6 +337,118 @@
           using the support contact shown on the Doc Copilot Chrome Web Store
           listing.
         </p>
+        </section>
+
+        <section id="chinese" lang="zh-CN">
+        <h2>中文</h2>
+
+        <div class="notice">
+          <p>
+            Doc Copilot 不运营由开发者自有的后端 AI 处理服务。用户使用 AI
+            功能时，扩展会从浏览器直接把相关内容发送到用户在扩展设置中配置的
+            AI API 地址。
+          </p>
+        </div>
+
+        <h2>概述</h2>
+        <p>
+          Doc Copilot 是一款 Chrome 扩展，用于在网页文档编辑器和内容页面中辅助用户进行自动补全、改写、审稿、对话和导出。
+        </p>
+        <p>
+          本政策说明扩展会处理哪些数据、处理数据的目的、数据存储位置，以及数据如何发送到用户自行选择的第三方 AI 服务。
+        </p>
+
+        <h2>扩展处理的数据</h2>
+        <p>根据用户使用的功能，Doc Copilot 可能处理以下数据：</p>
+        <ul>
+          <li>支持的网站、编辑器、只读页面、文章或引用页面中的页面和文档文本内容。</li>
+          <li>选中文本、光标附近文本、文档标题、页面 URL，以及生成补全、改写、审稿和聊天回复所需的页面上下文。</li>
+          <li>用户在 Doc Copilot 聊天、提示词、改写、审稿或设置输入框中输入的文本。</li>
+          <li>用户明确添加到 AI 聊天或生成流程中的可选图片或图片引用。</li>
+          <li>扩展设置，包括 AI API Base URL、API Key、模型 ID、功能开关、提示词设置和用量统计。</li>
+          <li>启用或使用相关功能时，本地聊天历史和固定引用内容。</li>
+          <li>用户使用导出或保存功能时，由 Chrome 在本地生成的 PDF 数据。</li>
+        </ul>
+
+        <h2>数据用途</h2>
+        <p>Doc Copilot 仅为提供扩展功能而使用处理的数据：</p>
+        <ul>
+          <li>生成自动补全建议和 ghost text。</li>
+          <li>改写、润色、翻译或修正选中文本。</li>
+          <li>分析文档内容并生成审稿建议。</li>
+          <li>回答关于当前文档或页面的问题。</li>
+          <li>保存用户设置、本地聊天会话和固定引用。</li>
+          <li>在用户请求时生成本地 PDF 导出。</li>
+        </ul>
+        <p>
+          Doc Copilot 不会将用户数据用于广告、用户画像、信用评估、出售或与产品功能无关的分析。
+        </p>
+
+        <h2>AI API 服务商</h2>
+        <p>
+          在使用 AI 功能前，用户需要配置兼容 OpenAI 格式的 API Base URL、API Key 和模型 ID。使用 AI 功能时，扩展会把相关提示词、文档上下文、选中文本、聊天消息和可选图片发送到该配置的 API 地址。
+        </p>
+        <p>
+          用户配置的 AI 服务商可能会根据其自身服务条款和隐私政策处理、保存或记录提交的数据。用户应只配置自己信任的 AI 服务商，并避免向不可信服务商发送无权共享或高度敏感的内容。
+        </p>
+
+        <h2>本地存储</h2>
+        <p>
+          Doc Copilot 会把设置保存在用户设备上的 Chrome 扩展存储中。聊天历史和固定引用可能保存在浏览器本地 IndexedDB 中。Token 用量统计可能保存在浏览器存储中。这些记录用于恢复扩展状态和提供本地历史功能。
+        </p>
+        <p>
+          除非用户为了支持或调试主动分享，否则开发者不会收到这些本地存储记录。
+        </p>
+
+        <h2>数据共享</h2>
+        <p>
+          Doc Copilot 不出售用户数据。Doc Copilot 不会把用户数据发送到开发者自有服务器用于 AI 处理，因为开发者不为此目的运营该类服务器。
+        </p>
+        <p>
+          用户使用 AI 功能时，数据可能会发送给用户配置的 AI API 服务商。为了实现扩展存储、右键菜单、下载和页面导出等功能，数据也可能由 Chrome 和浏览器平台按必要方式处理。
+        </p>
+
+        <h2>权限说明</h2>
+        <p>Doc Copilot 使用 Chrome 扩展权限用于以下目的：</p>
+        <ul>
+          <li><strong>Host permissions：</strong>在支持的文档、编辑器、文章和发布网站上运行。</li>
+          <li><strong>activeTab：</strong>用户调用扩展功能时，与当前活动页面交互。</li>
+          <li><strong>storage：</strong>保存设置、功能偏好和本地用量状态。</li>
+          <li><strong>contextMenus：</strong>为选中文本和页面审稿提供右键菜单操作。</li>
+          <li><strong>debugger：</strong>在用户请求 PDF 导出时调用 Chrome 的 Page.printToPDF 能力，并在完成后断开连接。</li>
+          <li><strong>downloads：</strong>把生成的 PDF 文件保存到用户设备。</li>
+        </ul>
+
+        <h2>用户控制</h2>
+        <p>用户可以通过以下方式控制自己的数据：</p>
+        <ul>
+          <li>在扩展面板中修改或删除模型 API 设置。</li>
+          <li>在可用时关闭可选历史功能。</li>
+          <li>在可用时删除本地聊天会话和固定引用。</li>
+          <li>通过 Chrome 设置清除扩展存储。</li>
+          <li>卸载扩展以移除扩展控制的本地数据。</li>
+        </ul>
+
+        <h2>安全</h2>
+        <p>
+          Doc Copilot 设计为仅向用户配置的 API 地址发送 AI 请求。用户应配置 HTTPS 地址并妥善保护 API Key。本地或网络存储均无法保证绝对安全，因此用户应避免向不可信 AI 服务商提交高度敏感内容。
+        </p>
+
+        <h2>儿童隐私</h2>
+        <p>
+          Doc Copilot 并非面向儿童设计。本扩展用于生产力和文档工作流。
+        </p>
+
+        <h2>政策变更</h2>
+        <p>
+          当 Doc Copilot 的数据处理方式发生变化或新增功能时，本政策可能更新。发生重要变更时，页面顶部的生效日期会同步更新。
+        </p>
+
+        <h2>联系方式</h2>
+        <p>
+          如有与 Doc Copilot 隐私相关的问题，请通过 Doc Copilot Chrome 应用商店页面展示的支持联系方式联系开发者。
+        </p>
+        </section>
       </article>
     </main>
   </body>
