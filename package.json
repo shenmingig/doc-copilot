@@ -1,0 +1,18 @@
+{
+  "name": "doc-copilot",
+  "version": "0.2.94",
+  "description": "Document Copilot - AI-powered writing assistant Chrome Extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "dev": "bash scripts/build.sh && echo 'Watching...' && chokidar 'src/**/*.ts' -c 'bash scripts/build.sh' 2>/dev/null || echo 'For watch mode: pnpm add -D chokidar-cli'",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0"
+  }
+}

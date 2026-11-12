@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doc Copilot v0.1.1 - 下载</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); max-width: 560px; width: 90%; overflow: hidden; }
+    .header { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; padding: 32px; text-align: center; }
+    .header h1 { font-size: 28px; margin-bottom: 8px; }
+    .header p { opacity: 0.85; font-size: 14px; }
+    .version { display: inline-block; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-top: 12px; }
+    .content { padding: 32px; }
+    .downloads { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+    .dl-btn { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; text-decoration: none; color: #1e293b; transition: all 0.2s; }
+    .dl-btn:hover { border-color: #667eea; background: #f1f5f9; }
+    .dl-btn .icon { font-size: 28px; }
+    .dl-btn .info { flex: 1; }
+    .dl-btn .info .name { font-weight: 600; font-size: 15px; }
+    .dl-btn .info .desc { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .dl-btn .size { font-size: 12px; color: #94a3b8; }
+    .steps { background: #f1f5f9; border-radius: 10px; padding: 20px; }
+    .steps h3 { font-size: 14px; margin-bottom: 12px; color: #475569; }
+    .steps ol { padding-left: 20px; font-size: 13px; line-height: 2; color: #475569; }
+    .steps code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .fixes { margin-top: 20px; padding: 16px; border: 1px solid #fde68a; border-radius: 10px; background: #fffbeb; }
+    .fixes h3 { font-size: 14px; color: #92400e; margin-bottom: 8px; }
+    .fixes ul { padding-left: 20px; font-size: 13px; color: #78350f; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>🤖 Doc Copilot</h1>
+      <p>AI 文档写作助手 Chrome 扩展</p>
+      <span class="version">v0.1.1 — Bug Fix Release</span>
+    </div>
+    <div class="content">
+      <div class="downloads">
+        <a class="dl-btn" href="doc-copilot-v0.1.1-chrome.zip" download>
+          <span class="icon">📦</span>
+          <div class="info">
+            <div class="name">Chrome 扩展包</div>
+            <div class="desc">解压后在 chrome://extensions 加载</div>
+          </div>
+          <span class="size">30 KB</span>
+        </a>
+        <a class="dl-btn" href="doc-copilot-v0.1.1-source.zip" download>
+          <span class="icon">📁</span>
+          <div class="info">
+            <div class="name">完整源码</div>
+            <div class="desc">TypeScript 源码 + 构建脚本</div>
+          </div>
+          <span class="size">54 KB</span>
+        </a>
+      </div>
+      <div class="steps">
+        <h3>📋 安装步骤</h3>
+        <ol>
+          <li>下载 <strong>Chrome 扩展包</strong> 并解压到任意文件夹</li>
+          <li>Chrome 地址栏输入 <code>chrome://extensions</code></li>
+          <li>右上角打开 <strong>开发者模式</strong></li>
+          <li>点击 <strong>加载已解压的扩展程序</strong></li>
+          <li>选择解压后的文件夹</li>
+        </ol>
+      </div>
+      <div class="fixes">
+        <h3>🔧 v0.1.1 修复内容</h3>
+        <ul>
+          <li>修复 manifest.json 缺少 <code>contextMenus</code> 权限（导致 Service Worker 注册失败）</li>
+          <li>移除 background service worker 的 <code>type: "module"</code>（与 IIFE 构建格式不兼容）</li>
+          <li>修复 popup.html 中 <code>type="module"</code> 导致的脚本加载问题</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

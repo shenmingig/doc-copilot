@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1400, initial-scale=1">
+  <title>Doc Copilot Marquee Promo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 1400px;
+      height: 560px;
+      margin: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #10223a;
+      background: transparent;
+    }
+
+    .tile {
+      position: relative;
+      display: flex;
+      width: 1400px;
+      height: 560px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 88% 12%, rgba(0, 194, 168, 0.18), transparent 28%),
+        linear-gradient(135deg, #f8fbff 0%, #edf6ff 48%, #f2fffb 100%);
+    }
+
+    .tile::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(37, 99, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 255, 0.08) 1px, transparent 1px);
+      background-size: 36px 36px;
+      mask-image: linear-gradient(110deg, rgba(0, 0, 0, 0.60), transparent 70%);
+      pointer-events: none;
+    }
+
+    .copy {
+      position: relative;
+      z-index: 2;
+      width: 610px;
+      padding: 76px 0 0 86px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 42px;
+    }
+
+    .logo {
+      width: 72px;
+      height: 72px;
+      filter: drop-shadow(0 16px 28px rgba(21, 87, 211, 0.24));
+    }
+
+    .name {
+      font-size: 34px;
+      line-height: 1;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      width: 600px;
+      margin: 0;
+      font-size: 66px;
+      line-height: 1.08;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+
+    .accent {
+      color: #2563ff;
+    }
+
+    .lead {
+      width: 560px;
+      margin: 24px 0 0;
+      color: #48637f;
+      font-size: 26px;
+      line-height: 1.45;
+      font-weight: 560;
+      letter-spacing: 0;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      width: 560px;
+      margin-top: 34px;
+    }
+
+    .chip {
+      height: 42px;
+      padding: 0 18px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(37, 99, 255, 0.12);
+      color: #285272;
+      font-size: 18px;
+      font-weight: 680;
+      box-shadow: 0 10px 26px rgba(38, 92, 148, 0.08);
+    }
+
+    .product {
+      position: absolute;
+      z-index: 2;
+      right: 70px;
+      bottom: 54px;
+      width: 650px;
+      height: 420px;
+    }
+
+    .browser {
+      position: absolute;
+      inset: 0;
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.90);
+      border: 1px solid rgba(35, 78, 134, 0.10);
+      box-shadow: 0 34px 80px rgba(26, 80, 144, 0.18);
+      overflow: hidden;
+    }
+
+    .topbar {
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-left: 24px;
+      border-bottom: 1px solid rgba(36, 69, 112, 0.08);
+      background: rgba(248, 251, 255, 0.90);
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #d5e1ef;
+    }
+
+    .doc {
+      position: absolute;
+      left: 38px;
+      top: 92px;
+      width: 340px;
+    }
+
+    .title-line {
+      width: 265px;
+      height: 22px;
+      border-radius: 999px;
+      background: #10223a;
+      margin-bottom: 28px;
+    }
+
+    .line {
+      height: 13px;
+      border-radius: 999px;
+      background: #d9e5f3;
+      margin-bottom: 18px;
+    }
+
+    .line.blue {
+      width: 282px;
+      background: #2f74ef;
+    }
+
+    .line.teal {
+      width: 220px;
+      background: #35a9c9;
+    }
+
+    .line.soft {
+      width: 310px;
+      background: #d9e5f3;
+    }
+
+    .line.short {
+      width: 170px;
+      background: #d9e5f3;
+    }
+
+    .ghost {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 292px;
+      height: 42px;
+      padding: 0 14px;
+      margin-top: 18px;
+      border-radius: 14px;
+      background: rgba(0, 194, 168, 0.12);
+      color: #007d70;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .tab {
+      height: 24px;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 8px;
+      color: #ffffff;
+      background: #00a88f;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .chat {
+      position: absolute;
+      right: 34px;
+      top: 86px;
+      width: 242px;
+      height: 288px;
+      padding: 22px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, #ffffff, #f8fcff);
+      border: 1px solid rgba(37, 99, 255, 0.12);
+      box-shadow: 0 28px 58px rgba(21, 87, 211, 0.16);
+    }
+
+    .chat-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      color: #10223a;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .chat-icon {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #2563ff, #00c2a8);
+      font-size: 19px;
+      font-weight: 900;
+    }
+
+    .bubble {
+      width: 176px;
+      min-height: 52px;
+      padding: 13px 15px;
+      border-radius: 18px;
+      background: #eef5ff;
+      color: #45607b;
+      font-size: 15px;
+      line-height: 1.35;
+      font-weight: 620;
+      margin-bottom: 14px;
+    }
+
+    .bubble.answer {
+      width: 196px;
+      margin-left: 4px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #2563ff, #00a88f);
+    }
+
+    .spark {
+      position: absolute;
+      right: 8px;
+      top: -22px;
+      width: 62px;
+      height: 62px;
+      display: grid;
+      place-items: center;
+      border-radius: 20px;
+      color: #ffffff;
+      font-size: 34px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #2563ff, #00c2a8);
+      box-shadow: 0 20px 45px rgba(0, 139, 177, 0.24);
+    }
+  </style>
+</head>
+<body>
+  <main class="tile">
+    <section class="copy">
+      <div class="brand">
+        <img class="logo" src="../public/icons/icon-128.png" alt="">
+        <div class="name">Doc Copilot</div>
+      </div>
+
+      <h1>让 <span class="accent">AI</span> 留在你的文档现场</h1>
+      <p class="lead">网页文档补全、改写、翻译、审稿与问答。</p>
+
+      <div class="chips" aria-hidden="true">
+        <div class="chip">智能补全</div>
+        <div class="chip">改写翻译</div>
+        <div class="chip">文档审稿</div>
+        <div class="chip">页面问答</div>
+      </div>
+    </section>
+
+    <section class="product" aria-hidden="true">
+      <div class="browser">
+        <div class="topbar">
+          <div class="dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+        </div>
+
+        <div class="doc">
+          <div class="title-line"></div>
+          <div class="line blue"></div>
+          <div class="line teal"></div>
+          <div class="line soft"></div>
+          <div class="line short"></div>
+          <div class="ghost"><span class="tab">Tab</span> 采纳 AI 补全</div>
+        </div>
+
+        <div class="chat">
+          <div class="spark">✦</div>
+          <div class="chat-head">
+            <div class="chat-icon">AI</div>
+            <span>Chat</span>
+          </div>
+          <div class="bubble">总结这段文档的重点</div>
+          <div class="bubble answer">已提炼出 3 个关键结论，并给出改写建议。</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

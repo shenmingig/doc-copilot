@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=440, initial-scale=1">
+  <title>Doc Copilot Small Promo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 440px;
+      height: 280px;
+      margin: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #132238;
+      background: transparent;
+    }
+
+    .tile {
+      position: relative;
+      width: 440px;
+      height: 280px;
+      padding: 30px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(37, 99, 255, 0.08), rgba(0, 194, 168, 0.10)),
+        linear-gradient(135deg, #f8fbff 0%, #eef7ff 53%, #f3fffb 100%);
+    }
+
+    .tile::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(37, 99, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 255, 0.08) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(120deg, rgba(0, 0, 0, 0.55), transparent 72%);
+      pointer-events: none;
+    }
+
+    .brand {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 54px;
+      height: 54px;
+      filter: drop-shadow(0 12px 22px rgba(21, 87, 211, 0.22));
+    }
+
+    .name {
+      font-size: 24px;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    .headline {
+      position: relative;
+      z-index: 2;
+      width: 230px;
+      margin: 32px 0 0;
+      font-size: 31px;
+      line-height: 1.12;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .subline {
+      position: relative;
+      z-index: 2;
+      margin-top: 15px;
+      font-size: 17px;
+      line-height: 1.5;
+      color: #43607c;
+      font-weight: 620;
+    }
+
+    .mock {
+      position: absolute;
+      right: 24px;
+      bottom: 25px;
+      width: 164px;
+      height: 142px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 24px 52px rgba(31, 84, 159, 0.18);
+      border: 1px solid rgba(37, 99, 255, 0.10);
+      padding: 18px;
+    }
+
+    .dotbar {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 18px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #d8e4f2;
+    }
+
+    .line {
+      height: 8px;
+      border-radius: 999px;
+      background: #2f74ef;
+      margin-bottom: 11px;
+    }
+
+    .line.medium {
+      width: 82px;
+      background: #37a7cf;
+    }
+
+    .line.short {
+      width: 58px;
+      background: #c6d5e6;
+    }
+
+    .ghost {
+      width: 92px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(0, 194, 168, 0.22);
+    }
+
+    .spark {
+      position: absolute;
+      right: -8px;
+      top: -11px;
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #2563ff, #00c2a8);
+      box-shadow: 0 16px 32px rgba(0, 139, 177, 0.24);
+    }
+  </style>
+</head>
+<body>
+  <main class="tile">
+    <section class="brand" aria-label="Doc Copilot">
+      <img class="logo" src="../public/icons/icon-128.png" alt="">
+      <div class="name">Doc Copilot</div>
+    </section>
+
+    <h1 class="headline">AI 文档写作助手</h1>
+    <p class="subline">补全 · 改写 · 审稿 · Chat</p>
+
+    <aside class="mock" aria-hidden="true">
+      <div class="spark">✦</div>
+      <div class="dotbar">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+      <div class="line"></div>
+      <div class="line medium"></div>
+      <div class="line short"></div>
+      <div class="ghost"></div>
+    </aside>
+  </main>
+</body>
+</html>
