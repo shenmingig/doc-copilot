@@ -12,6 +12,23 @@ export function injectStyles(): void {
 }
 
 const CSS_TEXT = `
+/* Chrome 110+ renders MathML natively; no CDN, injected scripts or font downloads. */
+.dc-math-block {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 12px 0;
+  padding: 8px 2px;
+  color: inherit;
+}
+.dc-math-block math, .dc-math-inline math {
+  font-family: "Cambria Math", "STIX Two Math", math;
+  font-size: 1.08em;
+  color: inherit;
+}
+.dc-math-inline { white-space: nowrap; }
+.dc-math-fallback { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* ============================================
    Doc Copilot Styles — Clean & Minimal
    ============================================ */
@@ -1748,6 +1765,19 @@ const CSS_TEXT = `
   transition: background 0.15s;
   line-height: 1;
 }
+.dc-sel-toolbar-cancel {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid #fecaca;
+  border-radius: 5px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dc-sel-toolbar-cancel[hidden] { display: none !important; }
+.dc-sel-toolbar-cancel:hover { background: #fee2e2; }
 .dc-sel-toolbar-send:hover {
   background: #4a4eb5;
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Doc Copilot",
-  "version": "0.2.105",
+  "version": "0.2.106",
   "description": "AI-powered document writing assistant — autocomplete, review mode, agent",
   "permissions": [
     "activeTab",

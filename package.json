@@ -1,6 +1,6 @@
 {
   "name": "doc-copilot",
-  "version": "0.2.105",
+  "version": "0.2.106",
   "description": "Document Copilot - AI-powered writing assistant Chrome Extension",
   "private": true,
   "type": "module",
@@ -13,12 +13,15 @@
     "dev": "node scripts/build.mjs --watch",
     "package": "node scripts/build.mjs --package",
     "typecheck": "tsc --noEmit",
-    "test:agent": "node --experimental-strip-types --test src/core/agent/*.test.ts src/core/models/*.test.ts src/shared/utils/*.test.ts",
+    "test:agent": "node --experimental-strip-types --test src/core/agent/*.test.ts src/core/models/*.test.ts src/shared/utils/*.test.ts scripts/*.test.mjs",
     "clean": "node scripts/build.mjs --clean"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",
     "typescript": "^5.4.0",
     "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "katex": "0.19.1"
   }
 }

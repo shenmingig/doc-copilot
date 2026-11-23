@@ -11,6 +11,7 @@ import { ChromeDocumentAdapter } from '../../adapters/chrome/adapter';
 import { AppSettings, DocumentContext, Range, QuickPrompt, DEFAULT_QUICK_PROMPTS } from '../../shared/types/index';
 import { settingsStorage } from '../../shared/storage/settings';
 import { mergeCurrentDocumentImages, prepareDocumentImagesForModel } from '../document-image-utils';
+import { ActiveRequest } from '../../shared/utils/request-cancellation';
 
 /** Map Baidu Ku's Slate CSS classes → standard semantic HTML tags */
 const SLATE_MARK_MAP: Array<{ selector: string; tag: string }> = [
@@ -98,6 +99,7 @@ export class ParagraphOptimizerController {
 
   // Shared
   private isProcessing = false;
+  private readonly activeRequest = new ActiveRequest();
   private isInputFocused = false;
   private isToolbarPointerDown = false;
   private pendingPointer: {
@@ -155,6 +157,7 @@ export class ParagraphOptimizerController {
   }
 
   dispose(): void {
+    this.cancelProcessing(false);
     this.isProcessing = false;
     this.imageResultOpen = false;
     this.stopProgressTimer();
@@ -506,6 +509,12 @@ export class ParagraphOptimizerController {
   }
 
   private onDocumentKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && this.isProcessing && !event.isComposing) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.cancelProcessing();
+      return;
+    }
     if (event.key === 'Escape' && this.imageResultOpen && !this.isProcessing && !event.isComposing) {
       event.preventDefault();
       event.stopPropagation();
@@ -755,12 +764,25 @@ export class ParagraphOptimizerController {
       this.runWithPrompt(prompt ? `配图：${prompt}` : '配图');
     });
 
-    // Structure: bar contains [icon (with tags inside), input, sendBtn]
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'dc-sel-toolbar-cancel';
+    cancelBtn.textContent = '取消';
+    cancelBtn.title = '取消当前请求 (Esc)';
+    cancelBtn.hidden = true;
+    cancelBtn.addEventListener('mousedown', e => e.preventDefault());
+    cancelBtn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.cancelProcessing();
+    });
+
     icon.appendChild(tags);
     bar.appendChild(icon);
     bar.appendChild(input);
     bar.appendChild(imageBtn);
     bar.appendChild(sendBtn);
+    bar.appendChild(cancelBtn);
 
     wrapper.appendChild(bar);
     document.body.appendChild(wrapper);
@@ -853,6 +875,11 @@ export class ParagraphOptimizerController {
   private setToolbarLoading(loading: boolean): void {
     if (!this.toolbar || !this.toolbarInput) return;
     const bar = this.toolbar.querySelector('.dc-sel-toolbar') as HTMLElement | null;
+    const cancel = this.toolbar.querySelector<HTMLButtonElement>('.dc-sel-toolbar-cancel');
+    if (cancel) cancel.hidden = !loading;
+    bar?.querySelectorAll<HTMLButtonElement>('.dc-sel-toolbar-send, .dc-sel-toolbar-image').forEach(button => {
+      button.disabled = loading;
+    });
     if (loading) {
       this.toolbarInput.readOnly = true;
       this.toolbarInput.placeholder = '处理中...';
@@ -865,6 +892,21 @@ export class ParagraphOptimizerController {
   }
 
   // ─── Core logic — streaming mode ────────────────────────────────────────────
+
+  private cancelProcessing(notify = true, message = '已取消，可以重新提交'): void {
+    const requestId = this.activeRequest.clear();
+    if (!requestId) return;
+    this.isProcessing = false;
+    this.setToolbarLoading(false);
+    this.stopProgressTimer();
+    this.clearImageDeadline();
+    this.hidePreview();
+    void chrome.runtime.sendMessage({
+      type: 'SELECTION_ACTION_CANCEL',
+      payload: { requestId },
+    }).catch(() => undefined);
+    if (notify) this.showNotification(message, 'info');
+  }
 
   private async runWithPrompt(
     userPrompt: string,
@@ -881,6 +923,10 @@ export class ParagraphOptimizerController {
     }
 
     this.isProcessing = true;
+    const requestId = crypto.randomUUID();
+    this.activeRequest.start(requestId);
+    const selectedHtml = this.savedSelectionHtml;
+    const context = this.savedContext;
     this.imageResultOpen = false;
     this.clearImageResult();
     this.setToolbarLoading(true);
@@ -892,8 +938,8 @@ export class ParagraphOptimizerController {
     this.showPreview('');
     if (isImagePrompt) {
       this.startProgressTimer();
-      this.armImageDeadline();
     }
+    this.armRequestDeadline(requestId, isImagePrompt);
 
     let documentImages = this.savedContext?.documentImages ?? [];
     if (isImagePrompt) {
@@ -901,6 +947,7 @@ export class ParagraphOptimizerController {
       try {
         const mergedImages = mergeCurrentDocumentImages(documentImages);
         documentImages = await prepareDocumentImagesForModel(mergedImages);
+        if (!this.activeRequest.matches(requestId)) return;
         if (documentImages.length) {
           this.updatePreview(`已读取 ${documentImages.length} 张正文参考图，正在分析配色和风格...`);
         } else {
@@ -912,28 +959,34 @@ export class ParagraphOptimizerController {
       }
     }
 
+    if (!this.activeRequest.matches(requestId)) return;
     // Fire-and-forget: background will push STREAM_CHUNK / STREAM_END messages
     chrome.runtime.sendMessage({
       type: 'SELECTION_ACTION_REQUEST',
       payload: {
+        requestId,
         prompt: userPrompt,
         selectedText,
-        selectedHtml: this.savedSelectionHtml,
+        selectedHtml,
         title: document.title,
-        textBefore: this.savedContext?.textBefore ?? '',
-        textAfter: this.savedContext?.textAfter ?? '',
-        fullText: this.savedContext?.fullText ?? null,
+        textBefore: context?.textBefore ?? '',
+        textAfter: context?.textAfter ?? '',
+        fullText: context?.fullText ?? null,
         documentImages,
       },
+    }).then(response => {
+      if (response?.error || response?.cancelled) {
+        this.onStreamEnd({ requestId, error: response.error || '请求已取消或超时，可以重新提交' });
+      }
     }).catch(() => {
       // Background returned an error synchronously (e.g. no handler)
-      this.onStreamEnd({ error: '请求失败，请重试' });
+      this.onStreamEnd({ requestId, error: '请求失败，请重试' });
     });
   }
 
   /** Called by content/index.ts when a SELECTION_ACTION_STREAM_CHUNK arrives */
-  onStreamChunk(_delta: string, fullText: string): void {
-    if (!this.isProcessing) return;
+  onStreamChunk(_delta: string, fullText: string, requestId?: string): void {
+    if (!this.isProcessing || !this.activeRequest.matches(requestId)) return;
     if (this.progressMode === 'image' && fullText.includes('正在生成配图')) {
       this.startProgressTimer();
       return;
@@ -943,6 +996,7 @@ export class ParagraphOptimizerController {
 
   /** Called by content/index.ts when a SELECTION_ACTION_STREAM_END arrives */
   onStreamEnd(result: {
+    requestId?: string;
     action?: string;
     result?: string;
     resultHtml?: string;
@@ -951,7 +1005,8 @@ export class ParagraphOptimizerController {
     generatedPrompt?: string;
     error?: string;
   }): void {
-    if (!this.isProcessing) return;
+    if (!this.isProcessing || !this.activeRequest.matches(result.requestId)) return;
+    this.activeRequest.clear();
 
     this.isProcessing = false;
     this.setToolbarLoading(false);
@@ -1082,12 +1137,14 @@ export class ParagraphOptimizerController {
     this.progressTimer = null;
   }
 
-  private armImageDeadline(): void {
+  private armRequestDeadline(requestId: string, image: boolean): void {
     this.clearImageDeadline();
     this.imageDeadlineTimer = setTimeout(() => {
-      if (!this.isProcessing || this.progressMode !== 'image') return;
-      this.onStreamEnd({ error: '图像生成超过 3 分钟还没有返回，已停止等待。请再试一次。' });
-    }, 180_000);
+      if (!this.activeRequest.matches(requestId)) return;
+      this.cancelProcessing(true, image
+        ? '图像生成超过 3 分钟，已取消本次请求，可以重试。'
+        : '文本处理超过 5 分钟，已取消本次请求，可以重试。');
+    }, image ? 180_000 : 300_000);
   }
 
   private clearImageDeadline(): void {
@@ -1107,7 +1164,7 @@ export class ParagraphOptimizerController {
           ? '图像生成仍在进行'
           : '图像接口响应较慢，即将停止等待';
     const elapsed = this.formatElapsed(elapsedSeconds);
-    this.updatePreview(`${stage}\n已等待 ${elapsed}\n\n可以点击页面其他位置，生成会继续。通常 20-90 秒会返回，超过 3 分钟会自动停止。`);
+    this.updatePreview(`${stage}\n已等待 ${elapsed}\n\n点击“取消”或按 Esc 可停止本次请求。通常 20-90 秒会返回，超过 3 分钟会自动取消。`);
     const label = this.previewEl?.querySelector('.dc-sel-preview-label') as HTMLElement | null;
     if (label) label.textContent = `${stage} · ${elapsed}`;
   }

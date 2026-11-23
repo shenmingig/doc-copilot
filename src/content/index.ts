@@ -550,11 +550,12 @@ class DocCopilot {
         this.paragraphOptimizer.onStreamChunk(
           (message.payload as { delta: string; fullText: string }).delta,
           (message.payload as { delta: string; fullText: string }).fullText,
+          (message.payload as { requestId?: string }).requestId,
         );
         break;
       case 'SELECTION_ACTION_STREAM_END':
         this.paragraphOptimizer.onStreamEnd(
-          message.payload as { action?: string; result?: string; resultHtml?: string; imageUrl?: string; error?: string },
+          message.payload as { requestId?: string; action?: string; result?: string; resultHtml?: string; imageUrl?: string; error?: string },
         );
         break;
     }

@@ -20,6 +20,7 @@ import { chatContentToText } from '../../shared/utils/index';
 import { debugLog, safeUrl, summarizeApiBody } from '../../shared/debug-log';
 import { resolveTextProtocolRouting } from './text-protocol';
 import { toResponsesInput } from './responses-input';
+import { abortableDelay, linkRequestAbort, throwIfRequestAborted } from '../../shared/utils/request-cancellation';
 
 /** 可重试的状态码 */
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -195,10 +196,11 @@ async function fetchWithRetry(
 ): Promise<Response> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    throwIfRequestAborted(init.signal || undefined);
     if (attempt > 0) {
       const delayMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
       console.log(`[Doc Copilot] API retry attempt ${attempt}/${maxRetries}, waiting ${delayMs}ms`);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+      await abortableDelay(delayMs, init.signal);
     }
     const startedAt = Date.now();
     const requestSummary = {
@@ -226,6 +228,7 @@ async function fetchWithRetry(
       lastError = new Error(errMsg);
       console.warn(`[Doc Copilot] ${errMsg}, retrying...`);
     } catch (err) {
+      throwIfRequestAborted(init.signal || undefined);
       // AbortError 等不重试
       if ((err as Error).name === 'AbortError') throw err;
       const message = (err as Error).message || String(err);
@@ -449,12 +452,15 @@ export class ModelProvider {
     role: ModelRole,
     messages: ChatMessage[],
     options: Partial<CompletionRequest> = {},
+    signal?: AbortSignal,
   ): Promise<CompletionResponse> {
+    throwIfRequestAborted(signal);
     const config = await this.getConfig(role);
     this.validateConfig(config);
 
     const requestId = `${role}-${Date.now()}`;
     const controller = new AbortController();
+    const unlink = linkRequestAbort(controller, signal);
     const timeout = createTimeoutSignal(controller);
     this.abortControllers.set(requestId, controller);
 
@@ -486,6 +492,7 @@ export class ModelProvider {
           await this.trackUsage(role, data);
           return data;
         } catch (error) {
+        throwIfRequestAborted(signal);
           lastError = rememberError(lastError, normalizeRequestError(error).message);
           if (plan.anthropicOnly || (plan.lockedProtocol && config.apiProtocol === 'anthropic-messages')) {
             throw new Error(lastError || 'Messages API 请求失败。');
@@ -506,6 +513,7 @@ export class ModelProvider {
             signal: controller.signal,
           });
         } catch (error) {
+        throwIfRequestAborted(signal);
           lastError = rememberError(lastError, normalizeRequestError(error).message);
           continue;
         }
@@ -547,6 +555,7 @@ export class ModelProvider {
           await this.trackUsage(role, data);
           return data;
         } catch (error) {
+        throwIfRequestAborted(signal);
           lastError = rememberError(lastError, normalizeRequestError(error).message);
         }
       }
@@ -567,12 +576,14 @@ export class ModelProvider {
         await this.trackUsage(role, data);
         return data;
       } catch (error) {
+        throwIfRequestAborted(signal);
         lastError = rememberError(lastError, normalizeRequestError(error).message);
       }
 
       throw new Error(lastError || 'Chat API 请求失败，请检查 API Base URL。');
     } finally {
       clearTimeout(timeout);
+      unlink();
       this.abortControllers.delete(requestId);
     }
   }
@@ -583,12 +594,15 @@ export class ModelProvider {
     messages: ChatMessage[],
     options: Partial<CompletionRequest> = {},
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    signal?: AbortSignal,
   ): AsyncGenerator<StreamChunk, void, undefined> {
+    throwIfRequestAborted(signal);
     const config = await this.getConfig(role);
     this.validateConfig(config);
 
     const requestId = `${role}-${Date.now()}`;
     const controller = new AbortController();
+    const unlink = linkRequestAbort(controller, signal);
     const timeout = createTimeoutSignal(controller, timeoutMs);
     this.abortControllers.set(requestId, controller);
 
@@ -615,6 +629,7 @@ export class ModelProvider {
           body.stop,
           plan.messagesEndpoints,
         );
+        throwIfRequestAborted(signal);
         if (messagesResult.started) return;
         lastError = rememberError(lastError, messagesResult.error);
         if (plan.anthropicOnly || (plan.lockedProtocol && config.apiProtocol === 'anthropic-messages')) {
@@ -635,6 +650,7 @@ export class ModelProvider {
             signal: controller.signal,
           });
         } catch (error) {
+        throwIfRequestAborted(signal);
           lastError = rememberError(lastError, normalizeRequestError(error).message);
           continue;
         }
@@ -726,6 +742,7 @@ export class ModelProvider {
           body.stop,
           plan.messagesEndpoints,
         );
+        throwIfRequestAborted(signal);
         if (messagesResult.started) return;
         if (messagesResult.error) lastError = rememberError(lastError, messagesResult.error);
       }
@@ -746,12 +763,14 @@ export class ModelProvider {
         yield this.completionToStreamChunk(role, data);
         return;
       } catch (error) {
+        throwIfRequestAborted(signal);
         lastError = rememberError(lastError, normalizeRequestError(error).message);
       }
 
       throw new Error(lastError || 'Chat API 请求失败，请检查 API Base URL。');
     } finally {
       clearTimeout(timeout);
+      unlink();
       this.abortControllers.delete(requestId);
     }
   }
@@ -763,7 +782,9 @@ export class ModelProvider {
     options: Partial<CompletionRequest> = {},
     onChunk?: (text: string, fullText: string) => void,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    signal?: AbortSignal,
   ): Promise<string> {
+    throwIfRequestAborted(signal);
     let fullText = '';
     const promptChars = messages.reduce((sum, m) => {
       if (typeof m.content === 'string') return sum + m.content.length;
@@ -774,7 +795,8 @@ export class ModelProvider {
     }, 0);
 
     let trackedApiUsage = false;
-    for await (const chunk of this.stream(role, messages, options, timeoutMs)) {
+    for await (const chunk of this.stream(role, messages, options, timeoutMs, signal)) {
+      throwIfRequestAborted(signal);
       if (chunk.usage) {
         await this.trackUsage(role, chunk as CompletionResponse);
         trackedApiUsage = true;
@@ -786,13 +808,15 @@ export class ModelProvider {
       }
     }
 
+    throwIfRequestAborted(signal);
     if (!fullText.trim()) {
       console.warn('[Doc Copilot] Streaming response was empty; retrying without stream.');
       try {
         const fallback = await this.complete(role, messages, {
           ...options,
           stream: false,
-        });
+        }, signal);
+        throwIfRequestAborted(signal);
         const fallbackText = this.extractCompletionText(fallback);
         if (fallbackText.trim()) {
           onChunk?.(fallbackText, fallbackText);
@@ -802,6 +826,7 @@ export class ModelProvider {
           console.warn('[Doc Copilot] Model returned reasoning content but no final answer.');
         }
       } catch (error) {
+        throwIfRequestAborted(signal);
         console.warn('[Doc Copilot] Non-stream fallback failed:', error);
       }
     }
@@ -1784,8 +1809,10 @@ export class ModelProvider {
    * Call OpenAI-compatible image generations endpoint.
    * Returns the URL of the generated image.
    */
-  async generateImage(prompt: string, options: { n?: number; size?: string } = {}): Promise<string> {
+  async generateImage(prompt: string, options: { n?: number; size?: string } = {}, signal?: AbortSignal): Promise<string> {
+    throwIfRequestAborted(signal);
     const settings = await settingsStorage.get();
+    throwIfRequestAborted(signal);
     const config = this.resolveImageConfig(settings);
     this.validateConfig(config);
     const size = options.size ?? settings.imageGenerationSize ?? '1024x1024';
@@ -1796,7 +1823,9 @@ export class ModelProvider {
     endpointLoop:
     for (const endpoint of this.getImageEndpointCandidates(config.baseUrl)) {
       for (const requestBase64 of [true, false]) {
+      throwIfRequestAborted(signal);
       const controller = new AbortController();
+      const unlink = linkRequestAbort(controller, signal);
       const timeout = createTimeoutSignal(controller, IMAGE_REQUEST_TIMEOUT_MS);
       try {
         const body: Record<string, unknown> = {
@@ -1846,22 +1875,26 @@ export class ModelProvider {
         produced = image;
         break endpointLoop;
       } catch (error) {
+        throwIfRequestAborted(signal);
         if (isAbortError(error)) {
           throw new Error('图像接口超过 2 分钟没有返回，已停止等待。请稍后重试。');
         }
         lastError = rememberError(lastError, normalizeRequestError(error).message);
       } finally {
         clearTimeout(timeout);
+        unlink();
       }
       }
     }
 
-    if (produced) return this.materializeGeneratedImage(produced, config.apiKey);
+    throwIfRequestAborted(signal);
+    if (produced) return this.materializeGeneratedImage(produced, config.apiKey, signal);
     if (fatalError) throw new Error(explainImageGenerationError(fatalError));
 
     try {
-      return await this.generateImageViaChat(config, prompt, size);
+      return await this.generateImageViaChat(config, prompt, size, signal);
     } catch (error) {
+      throwIfRequestAborted(signal);
       if (isAbortError(error)) {
         throw new Error('图像接口超过 2 分钟没有返回，已停止等待。请稍后重试。');
       }
@@ -1870,7 +1903,7 @@ export class ModelProvider {
     }
   }
 
-  private async generateImageViaChat(config: ModelConfig, prompt: string, size: string): Promise<string> {
+  private async generateImageViaChat(config: ModelConfig, prompt: string, size: string, signal?: AbortSignal): Promise<string> {
     const body = {
       model: config.modelId,
       messages: [{
@@ -1881,7 +1914,9 @@ export class ModelProvider {
     };
     let lastError = '';
     for (const endpoint of this.getChatCompletionEndpointCandidates(config.baseUrl)) {
+      throwIfRequestAborted(signal);
       const controller = new AbortController();
+      const unlink = linkRequestAbort(controller, signal);
       const timeout = createTimeoutSignal(controller, IMAGE_REQUEST_TIMEOUT_MS);
       try {
         const response = await fetchWithRetry(endpoint, {
@@ -1915,18 +1950,21 @@ export class ModelProvider {
           continue;
         }
         await this.trackImageUsage((data as { usage?: unknown }).usage);
-        return this.materializeGeneratedImage(image, config.apiKey);
+        return this.materializeGeneratedImage(image, config.apiKey, signal);
       } catch (error) {
+        throwIfRequestAborted(signal);
         if (isAbortError(error) || /^API 错误 40[13]\b/.test((error as Error).message || '')) throw error;
         lastError = rememberError(lastError, normalizeRequestError(error).message);
       } finally {
         clearTimeout(timeout);
+        unlink();
       }
     }
     throw new Error(lastError || '对话接口没有返回图片');
   }
 
-  private async materializeGeneratedImage(image: string, apiKey: string): Promise<string> {
+  private async materializeGeneratedImage(image: string, apiKey: string, signal?: AbortSignal): Promise<string> {
+    throwIfRequestAborted(signal);
     if (image.startsWith('data:image/')) {
       debugLog('info', 'image.materialized', { kind: 'data', chars: image.length });
       return image;
@@ -1937,16 +1975,18 @@ export class ModelProvider {
     let host = '';
     try { host = new URL(image).host; } catch { host = ''; }
     const headers: Record<string, string> = { Accept: 'image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8' };
-    let response = await fetch(image, { headers });
+    let response = await fetch(image, { headers, signal });
     if (response.status === 401 || response.status === 403) {
       response = await fetch(image, {
         headers: { ...headers, Authorization: `Bearer ${apiKey}` },
+        signal,
       });
     }
     if (!response.ok) {
       throw new Error(`图片下载失败：HTTP ${response.status}`);
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
+    throwIfRequestAborted(signal);
     const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     if (type && !type.startsWith('image/') && type !== 'application/octet-stream') {
       throw new Error(`图片下载结果不是图片（${type || 'unknown'}）`);

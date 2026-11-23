@@ -42,7 +42,7 @@ Storage Layer      → chrome.storage.sync（设置）
 - **构建**: Vite（3-pass IIFE 构建，不是 ESM）
 - **包管理**: pnpm
 - **构建目标**: Chrome 110+
-- **无外部运行时依赖**，纯 TypeScript 实现
+- **运行时依赖**：KaTeX 在构建时打包到扩展，用于将 LaTeX 公式转换为原生 MathML；不加载远程脚本或字体。其他核心逻辑为 TypeScript 实现。
 
 ### 关键设计决策
 - **IIFE 构建**：Chrome MV3 service worker 和 content script 都不支持 ES modules，必须用 IIFE

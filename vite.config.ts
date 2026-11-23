@@ -10,6 +10,8 @@ function copyStaticPlugin() {
     name: 'copy-extension-files',
     closeBundle() {
       const distDir = outDir;
+      mkdirSync(resolve(distDir, 'licenses'), { recursive: true });
+      copyFileSync(resolve(__dirname, 'node_modules/katex/LICENSE'), resolve(distDir, 'licenses/KaTeX-LICENSE.txt'));
 
       copyFileSync(
         resolve(__dirname, 'public/manifest.json'),

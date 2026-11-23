@@ -2,6 +2,8 @@
 // Shared Utilities
 // ============================================================
 
+import katex from 'katex';
+
 // ─── Log Collector (ring buffer, max 1000 entries) ──────────────────────────
 
 export interface LogEntry {
@@ -195,20 +197,65 @@ export function cx(...classes: Array<string | false | null | undefined>): string
  * - Tables (| col | col |)
  * - Blockquotes (> text)
  * - Horizontal rules (---)
+ * - LaTeX formulas (inline and display, locally rendered to native MathML)
  */
 export function renderMarkdown(md: string): string {
-  let html = escapeHtml(md);
+  // Reserve fragment delimiters for our own placeholders, never user input.
+  let html = md.replace(/\u0000/g, '');
   const blockFragments: string[] = [];
+  const inlineFragments: string[] = [];
+  const stashInline = (value: string): string =>
+    `\u0000DC_INLINE_${inlineFragments.push(value) - 1}\u0000`;
   const stashBlock = (blockHtml: string): string => {
     const index = blockFragments.push(blockHtml) - 1;
     return `\u0000DC_BLOCK_${index}\u0000`;
   };
 
   // Code blocks (must be first to avoid processing content inside)
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
+  html = html.replace(/(^|\n)[ \t]{0,3}(`{3,}|~{3,})([^\n]*)\n([\s\S]*?)(?:\n[ \t]{0,3}\2[ \t]*(?=\n|$)|$)/g, (_match, prefix, _fence, lang, code) => {
     const langLabel = lang ? ` <span class="dc-code-lang">${escapeHtml(lang)}</span>` : '';
-    return stashBlock(`<pre class="dc-code-block">${langLabel}<code>${code}</code></pre>`);
+    return `${prefix}${stashBlock(`<pre class="dc-code-block">${langLabel}<code>${escapeHtml(code)}</code></pre>`)}\n`;
   });
+  // Protect inline code before scanning formulas or normalizing block boundaries.
+  html = html.replace(/(`+)([^\n]*?)\1/g, (_match, _ticks, code) =>
+    stashInline(`<code class="dc-inline-code">${escapeHtml(code)}</code>`));
+
+  const mathSource = html;
+  const isEscaped = (offset: number): boolean => {
+    let slashes = 0;
+    while (offset > 0 && mathSource[--offset] === '\\') slashes++;
+    return slashes % 2 === 1;
+  };
+  // Links/URLs are consumed as literals so dollar signs inside them stay intact.
+  html = html.replace(/(https?:\/\/[^\s<>]+|!?\[[^\]\n]*\]\([^)\n]*\))|\\\[([\s\S]*?)\\\]|\$\$([\s\S]*?)\$\$|\\\(([\s\S]*?)\\\)|\$([^\n$]+?)\$/g,
+    (match, link, bracket, dollars, parens, inlineDollar, offset) => {
+      if (link || isEscaped(offset)) return match;
+      const expression: string = bracket ?? dollars ?? parens ?? inlineDollar;
+      if (!expression.trim()) return match;
+      // A single dollar must hug the expression; $20 and $30 are prices.
+      if (inlineDollar !== undefined && (/^\s|\s$/.test(expression) || /\d/.test(mathSource[offset + match.length] || ''))) return match;
+      const display = bracket !== undefined || dollars !== undefined;
+      let rendered: string;
+      try {
+        if (expression.length > 20_000) throw new Error('Formula too long');
+        rendered = katex.renderToString(expression, {
+          displayMode: display,
+          output: 'mathml',
+          throwOnError: true,
+          trust: false,
+          strict: 'ignore',
+          maxExpand: 500,
+          maxSize: 20,
+        });
+      } catch {
+        // Incomplete streamed or unsupported expressions remain readable.
+        return stashInline(`<span class="dc-math-fallback">${escapeHtml(match)}</span>`);
+      }
+      return display
+        ? `\n${stashBlock(`<div class="dc-math-block">${rendered}</div>`)}\n`
+        : stashInline(`<span class="dc-math-inline">${rendered}</span>`);
+    });
+  html = escapeHtml(html);
 
   // Split into lines for block-level processing
   const lines = normalizeMarkdownBlockBoundaries(html.split('\n'));
@@ -251,7 +298,7 @@ export function renderMarkdown(md: string): string {
     }
 
     // Unordered list
-    const ulMatch = line.match(/^(\s*)[-*+]\s*(.+)$/);
+    const ulMatch = line.match(/^(\s*)[-*+]\s+(.+)$/);
     if (ulMatch) {
       flushParagraph();
       if (inOrderedList) closeOrderedList();
@@ -365,7 +412,8 @@ export function renderMarkdown(md: string): string {
   flushParagraph();
   closeBlocks();
 
-  return output.join('\n');
+  return output.join('\n').replace(/\u0000DC_INLINE_(\d+)\u0000/g,
+    (_match, index) => inlineFragments[Number(index)] ?? '');
 
   function flushParagraph() {
     if (!paragraphLines.length) return;
@@ -434,7 +482,7 @@ export function renderMarkdown(md: string): string {
     return /^\u0000DC_BLOCK_\d+\u0000$/.test(trimmed)
       || /^-{3,}$/.test(trimmed)
       || /^(#{1,6})\s+/.test(line)
-      || /^(\s*)[-*+]\s*(.+)$/.test(line)
+      || /^(\s*)[-*+]\s+(.+)$/.test(line)
       || /^(\s*)\d+[.)、]\s*(.+)$/.test(line)
       || /^\|(.+)\|$/.test(line)
       || /^(?:>|&gt;)\s*(.*)$/.test(line);

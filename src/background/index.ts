@@ -13,6 +13,9 @@ import { agentSystem } from '../core/agent/system';
 import { modelProvider } from '../core/models/provider';
 import { debugLog, installDebugLogSink } from '../shared/debug-log';
 import { copyImageToClipboard } from './image-clipboard';
+import { ScopedRequestRegistry, throwIfRequestAborted } from '../shared/utils/request-cancellation';
+
+const selectionRequests = new ScopedRequestRegistry();
 
 const ALL_SITES_SCRIPT_ID = 'doc-copilot-all-sites';
 const DEBUG_LOG_STORAGE_KEY = 'doc_copilot_debug_log';
@@ -77,14 +80,14 @@ chrome.runtime.onMessage.addListener(
   (message: ExtensionMessage, sender, sendResponse) => {
     if ((message as { target?: string } | undefined)?.target === 'offscreen') return;
     const tabId = sender.tab?.id;
-    handleMessage(message, tabId)
+    handleMessage(message, tabId, sender.frameId ?? 0)
       .then(sendResponse)
       .catch(err => sendResponse({ error: err.message }));
     return true; // async response
   },
 );
 
-async function handleMessage(message: ExtensionMessage, tabId?: number): Promise<unknown> {
+async function handleMessage(message: ExtensionMessage, tabId?: number, frameId = 0): Promise<unknown> {
   switch (message.type) {
     case 'ENABLE_ALL_SITES': {
       await registerAllSitesScript();
@@ -217,12 +220,12 @@ async function handleMessage(message: ExtensionMessage, tabId?: number): Promise
     }
 
     case 'SELECTION_ACTION_REQUEST':
-      return handleSelectionAction(message.payload as {
-        prompt: string;
-        selectedText: string;
-        selectedHtml?: string;
-        title?: string;
-      }, tabId);
+      return handleSelectionAction(message.payload as SelectionImagePayload, tabId, frameId);
+
+    case 'SELECTION_ACTION_CANCEL': {
+      const { requestId } = message.payload as { requestId: string };
+      return { cancelled: selectionRequests.cancel(`${tabId}:${frameId}`, requestId) };
+    }
 
     case 'SAVE_PDF':
       return handleSavePdf(tabId);
@@ -448,6 +451,7 @@ async function handleAgentMessage(payload: {
  * Handles both text edits and selected-text illustration generation.
  */
 interface SelectionImagePayload {
+  requestId: string;
   prompt: string;
   selectedText: string;
   selectedHtml?: string;
@@ -476,27 +480,33 @@ interface SelectionActionEndResult {
   error?: string;
 }
 
-async function handleSelectionAction(payload: SelectionImagePayload, tabId?: number) {
+async function handleSelectionAction(payload: SelectionImagePayload, tabId?: number, frameId = 0) {
+  if (!payload.requestId || tabId === undefined) return { error: '请求缺少标识，请刷新页面重试' };
+  const scope = `${tabId}:${frameId}`;
+  const controller = selectionRequests.start(scope, payload.requestId);
+  const { signal } = controller;
+  const deadline = setTimeout(() => controller.abort(), isImageSelectionPrompt(payload.prompt) ? 180_000 : 300_000);
   /** Push a stream chunk to the originating tab */
   const pushChunk = (delta: string, fullText: string) => {
-    if (!tabId) return;
+    if (signal.aborted) return;
     chrome.tabs.sendMessage(tabId, {
       type: 'SELECTION_ACTION_STREAM_CHUNK',
-      payload: { delta, fullText },
-    }).catch(() => { /* tab may have navigated away */ });
+      payload: { delta, fullText, requestId: payload.requestId },
+    }, { frameId }).catch(() => { /* tab may have navigated away */ });
   };
 
   /** Signal stream end to the originating tab */
   const pushEnd = (result: SelectionActionEndResult) => {
-    if (!tabId) return;
+    if (signal.aborted) return;
     chrome.tabs.sendMessage(tabId, {
       type: 'SELECTION_ACTION_STREAM_END',
-      payload: result,
-    }).catch(() => {});
+      payload: { ...result, requestId: payload.requestId },
+    }, { frameId }).catch(() => {});
   };
 
   try {
     const settings = await settingsStorage.get();
+    throwIfRequestAborted(signal);
     const maxChars = settings.agentMaxContextChars;
 
     if (isImageSelectionPrompt(payload.prompt)) {
@@ -504,11 +514,13 @@ async function handleSelectionAction(payload: SelectionImagePayload, tabId?: num
       pushChunk('', placeholder
         ? '正在根据图片占位符和上下文补全配图 prompt...'
         : '正在根据选中文本和上下文整理配图 prompt...');
-      const imagePrompt = await buildImageGenerationPrompt(payload, maxChars, placeholder);
+      const imagePrompt = await buildImageGenerationPrompt(payload, maxChars, placeholder, signal);
+      throwIfRequestAborted(signal);
       pushChunk('', '配图 prompt 已生成，正在调用图像模型，通常需要 20-60 秒...');
       const imageUrl = await modelProvider.generateImage(imagePrompt, {
         size: settings.imageGenerationSize,
-      });
+      }, signal);
+      throwIfRequestAborted(signal);
       const finalResult: SelectionActionEndResult = {
         action: 'image',
         imageUrl,
@@ -532,7 +544,8 @@ async function handleSelectionAction(payload: SelectionImagePayload, tabId?: num
       temperature: 0.35,
     }, (delta, fullText) => {
       pushChunk(delta, fullText);
-    });
+    }, 300_000, signal);
+    throwIfRequestAborted(signal);
 
     const resultHtml = ensureHtmlFragment(rawResult);
     const resultText = htmlToPlainText(resultHtml);
@@ -540,9 +553,13 @@ async function handleSelectionAction(payload: SelectionImagePayload, tabId?: num
     pushEnd(finalResult);
     return finalResult;
   } catch (error) {
+    if (signal.aborted) return { cancelled: true, requestId: payload.requestId };
     const errResult = { error: (error as Error).message };
     pushEnd(errResult);
     return errResult;
+  } finally {
+    clearTimeout(deadline);
+    selectionRequests.finish(scope, controller);
   }
 }
 
@@ -562,6 +579,7 @@ async function buildImageGenerationPrompt(
   payload: SelectionImagePayload,
   maxChars = 8192,
   placeholder: ImagePlaceholderSpec | null = null,
+  signal?: AbortSignal,
 ): Promise<string> {
   const fallback = buildSelectionImagePrompt(payload, maxChars, placeholder);
   const messages = buildImagePromptRefinementMessages(payload, maxChars, placeholder, true);
@@ -575,9 +593,10 @@ async function buildImageGenerationPrompt(
     const refined = await modelProvider.streamToString('smart', messages, {
       max_tokens: 1200,
       temperature: 0.25,
-    }, undefined, 45_000);
+    }, undefined, 45_000, signal);
     return finish(normalizeImagePrompt(refined) || fallback);
   } catch (error) {
+    throwIfRequestAborted(signal);
     if (isTimeoutError(error)) {
       console.warn('[Doc Copilot] Image prompt refinement timed out; using fallback prompt.');
       return finish(fallback);
@@ -589,9 +608,10 @@ async function buildImageGenerationPrompt(
         const refined = await modelProvider.streamToString('smart', textOnlyMessages, {
           max_tokens: 1200,
           temperature: 0.25,
-        }, undefined, 45_000);
+        }, undefined, 45_000, signal);
         return finish(normalizeImagePrompt(refined) || fallback);
       } catch (textOnlyError) {
+        throwIfRequestAborted(signal);
         console.warn('[Doc Copilot] Text-only image prompt refinement failed; using fallback prompt.', textOnlyError);
       }
     }
