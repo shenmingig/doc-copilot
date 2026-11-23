@@ -1,14 +1,15 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync, existsSync, readdirSync, rmSync } from 'fs';
+import { copyFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 
 const target = process.env.BUILD_TARGET || 'all';
+const outDir = resolve(__dirname, 'output/dist');
 
 function copyStaticPlugin() {
   return {
     name: 'copy-extension-files',
     closeBundle() {
-      const distDir = resolve(__dirname, 'dist');
+      const distDir = outDir;
 
       copyFileSync(
         resolve(__dirname, 'public/manifest.json'),
@@ -40,7 +41,7 @@ function copyStaticPlugin() {
 function makeConfig(entry: string, outName: string, emptyOut: boolean, withCopy: boolean) {
   return defineConfig({
     build: {
-      outDir: 'dist',
+      outDir,
       emptyOutDir: emptyOut,
       target: 'chrome110',
       minify: false,

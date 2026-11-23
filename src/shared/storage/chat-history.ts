@@ -34,7 +34,11 @@ function sanitizeImage(image: ChatImageInput): ChatImageInput {
     id: image.id,
     name: image.name,
     mimeType: image.mimeType,
-    dataUrl: '',
+    dataUrl: image.origin === 'generated'
+      && image.dataUrl.startsWith('data:image/')
+      && image.dataUrl.length <= 6_000_000
+      ? image.dataUrl
+      : '',
     sourceUrl: image.sourceUrl,
     width: image.width,
     height: image.height,

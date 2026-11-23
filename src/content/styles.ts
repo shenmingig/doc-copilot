@@ -365,6 +365,20 @@ const CSS_TEXT = `
   gap: 8px;
   margin-bottom: 8px;
 }
+.dc-msg-image-item {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+.dc-msg-image-open {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
 .dc-msg-image {
   display: block;
   width: 100%;
@@ -375,6 +389,85 @@ const CSS_TEXT = `
 }
 .dc-msg-bubble-ai .dc-msg-image {
   border-color: rgba(0,0,0,0.08);
+}
+.dc-msg-image-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 6px;
+  background: rgba(24, 27, 34, 0.76);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.88;
+  transition: background 0.15s, opacity 0.15s;
+}
+.dc-msg-image-copy:hover,
+.dc-msg-image-copy:focus-visible {
+  background: rgba(24, 27, 34, 0.96);
+  opacity: 1;
+}
+.dc-msg-image-copy:disabled {
+  cursor: wait;
+}
+.dc-msg-image-copy-done {
+  background: #287a4b;
+  opacity: 1;
+}
+.dc-msg-image-copy-error {
+  background: #a83c3c;
+  opacity: 1;
+}
+.dc-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 48px 24px 24px;
+  background: rgba(14, 16, 20, 0.88);
+  cursor: zoom-out;
+}
+.dc-image-lightbox[hidden] {
+  display: none !important;
+}
+.dc-image-lightbox-image {
+  display: block;
+  max-width: min(94vw, 1600px);
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 16px 56px rgba(0,0,0,0.42);
+  cursor: default;
+}
+.dc-image-lightbox-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 6px;
+  background: rgba(24, 27, 34, 0.76);
+  color: #fff;
+  cursor: pointer;
+}
+.dc-image-lightbox-close:hover {
+  background: rgba(24, 27, 34, 0.98);
 }
 
 /* Code in bubbles */

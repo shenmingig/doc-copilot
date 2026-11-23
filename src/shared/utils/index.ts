@@ -211,7 +211,7 @@ export function renderMarkdown(md: string): string {
   });
 
   // Split into lines for block-level processing
-  const lines = html.split('\n');
+  const lines = normalizeMarkdownBlockBoundaries(html.split('\n'));
   const output: string[] = [];
   let paragraphLines: string[] = [];
   let inList = false;
@@ -481,4 +481,105 @@ export function renderMarkdown(md: string): string {
     }
     return null;
   }
+}
+
+function normalizeMarkdownBlockBoundaries(sourceLines: string[]): string[] {
+  const lines: string[] = [];
+
+  const expandedLines = sourceLines.flatMap(splitInlineMarkdownListItems);
+  for (let index = 0; index < expandedLines.length; index++) {
+    let line = expandedLines[index];
+    const headingStart = findEmbeddedHeadingStart(line);
+    if (headingStart > 0) {
+      lines.push(line.slice(0, headingStart).trimEnd());
+      line = line.slice(headingStart);
+    }
+
+    const separator = expandedLines[index + 1]?.trim() || '';
+    if (!isMarkdownTableSeparator(separator)) {
+      lines.push(line);
+      continue;
+    }
+
+    const expectedCellCount = separator.replace(/^\||\|$/g, '').split('|').length;
+    let rowStart = -1;
+    let pipe = line.indexOf('|');
+    while (pipe >= 0) {
+      const candidate = line.slice(pipe).trim();
+      if (candidate.startsWith('|') && candidate.endsWith('|')) {
+        const cellCount = candidate.slice(1, -1).split('|').length;
+        if (cellCount === expectedCellCount) {
+          rowStart = pipe;
+          break;
+        }
+      }
+      pipe = line.indexOf('|', pipe + 1);
+    }
+
+    if (rowStart > 0) {
+      const prefix = line.slice(0, rowStart).trimEnd();
+      if (prefix) lines.push(prefix);
+      lines.push(line.slice(rowStart).trim());
+    } else {
+      lines.push(line);
+    }
+  }
+
+  return lines;
+}
+
+function splitInlineMarkdownListItems(line: string): string[] {
+  const markers: number[] = [];
+  let codeDelimiterLength = 0;
+
+  for (let index = 0; index < line.length; index++) {
+    if (line[index] === '`') {
+      let end = index + 1;
+      while (line[end] === '`') end++;
+      const delimiterLength = end - index;
+      if (!codeDelimiterLength) codeDelimiterLength = delimiterLength;
+      else if (delimiterLength === codeDelimiterLength) codeDelimiterLength = 0;
+      index = end - 1;
+      continue;
+    }
+    if (codeDelimiterLength || index === 0 || line[index] !== '-') continue;
+    if (!/\s/.test(line[index - 1]) || !/^\s+\*\*\S/.test(line.slice(index + 1))) continue;
+    markers.push(index);
+  }
+
+  if (!markers.length) return [line];
+  const lines: string[] = [];
+  let start = 0;
+  for (const marker of markers) {
+    const preceding = line.slice(start, marker).trimEnd();
+    if (preceding) lines.push(preceding);
+    start = marker;
+  }
+  const last = line.slice(start).trim();
+  if (last) lines.push(last);
+  return lines;
+}
+
+function findEmbeddedHeadingStart(line: string): number {
+  const pattern = /\s+(#{1,6}\s+.+)$/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(line))) {
+    const boundary = match.index + match[0].indexOf('#');
+    let codeDelimiterLength = 0;
+    for (let index = 0; index < boundary; index++) {
+      if (line[index] !== '`') continue;
+      let end = index + 1;
+      while (line[end] === '`') end++;
+      const delimiterLength = end - index;
+      if (!codeDelimiterLength) codeDelimiterLength = delimiterLength;
+      else if (delimiterLength === codeDelimiterLength) codeDelimiterLength = 0;
+      index = end - 1;
+    }
+    if (!codeDelimiterLength) return boundary;
+  }
+  return -1;
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  return /^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/.test(line);
 }

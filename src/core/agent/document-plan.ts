@@ -54,28 +54,12 @@ export function wantsIllustratedDocument(userMessage: string): boolean {
 
 export function isDirectIllustrationRequest(userMessage: string): boolean {
   const text = userMessage.trim();
-  if (!text || isDocumentPlanRequest(text)) return false;
-  return /配图|插图|配一张|加一张图|生成配图|画一张|画个图|生成一张图|来一张图/.test(text);
-}
-
-export function buildIllustrationPrompt(userMessage: string, sourceText: string): { caption: string; prompt: string } {
-  const caption = cleanText(
-    userMessage
-      .replace(/请|帮我|一下/g, '')
-      .replace(/当前的|这个|这份/g, '')
-      .replace(/配图|插图|配一张图?|加一张图|生成配图|画一张|画个图|生成一张图|来一张图/g, '')
-      .replace(/^(给|为|把)/, ''),
-    40,
-  ) || '配图';
-  const excerpt = excerptAround(sourceText, caption);
-  return {
-    caption,
-    prompt: [
-      `为文档绘制一张清晰的示意图，主题是「${caption}」。`,
-      '用图形表达流程、阶段和关系，文字尽量短，不要水印，不要代码或 Mermaid。',
-      excerpt ? `依据这段内容：${excerpt}` : '',
-    ].filter(Boolean).join('\n'),
-  };
+  if (!text) return false;
+  if (/^\/(?:image|img)(?:$|\s|[:：])/i.test(text)) return true;
+  if (isDocumentPlanRequest(text)) return false;
+  const asksToGenerate = /生成|绘制|创建|配图|画(?:图|一张|一个|个)|调用.{0,16}(?:画图|生图|图像|图片)|(?:画|绘制).{0,12}图|generate|create|draw|illustrate|render|image\s+api/i.test(text);
+  const namesAnImage = /画图|图片|图像|插图|配图|示意图|信息图|图表|(?:这张|这个|一张|一幅|个)图|image|picture|diagram|illustration|chart/i.test(text);
+  return asksToGenerate && namesAnImage;
 }
 
 export function isDocumentPlanRequest(userMessage: string): boolean {
@@ -500,15 +484,6 @@ function actionFromText(value: string): PlannedSection['action'] | null {
   return leading ? ACTIONS.get(leading[1]) || null : null;
 }
 
-
-function excerptAround(sourceText: string, topic: string): string {
-  const text = sourceText.replace(/\s+/g, ' ').trim();
-  if (!text) return '';
-  const needle = topic.replace(/\s+/g, '');
-  const index = needle ? text.indexOf(needle) : -1;
-  if (index < 0) return text.slice(0, 700);
-  return text.slice(Math.max(0, index - 180), index + 620);
-}
 
 function cleanText(value: unknown, maxLength: number): string {
   if (typeof value !== 'string') return '';

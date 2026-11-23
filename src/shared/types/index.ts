@@ -59,6 +59,7 @@ export interface Disposable {
 // --- Model Provider ---
 
 export type ModelRole = 'smart' | 'image';
+export type ModelApiProtocol = 'auto' | 'anthropic-messages' | 'openai-chat-completions' | 'openai-responses';
 
 export interface ModelConfig {
   role: ModelRole;
@@ -66,6 +67,8 @@ export interface ModelConfig {
   baseUrl: string;
   apiKey: string;
   modelId: string;
+  /** API wire protocol; image generation ignores this setting. */
+  apiProtocol: ModelApiProtocol;
   /** Max tokens for completion */
   maxTokens: number;
   /** Temperature (0-2) */
@@ -99,6 +102,12 @@ export interface ToolCall {
   };
 }
 
+export type ToolChoice =
+  | 'auto'
+  | 'none'
+  | 'required'
+  | { type: 'function'; function: { name: string } };
+
 export interface CompletionRequest {
   messages: ChatMessage[];
   model?: string;
@@ -106,6 +115,7 @@ export interface CompletionRequest {
   max_tokens?: number;
   stream?: boolean;
   stop?: string[];
+  tool_choice?: ToolChoice;
 }
 
 export interface CompletionChoice {
@@ -401,7 +411,6 @@ export type MessageType =
   | 'REFERENCE_GET_BINDING'
   | 'REFERENCE_SET_BINDING'
   | 'REFERENCE_SEARCH_CONTEXT'
-  | 'IMAGE_GENERATE_REQUEST'
   | 'FETCH_IMAGE_DATA_URL'
   | 'COPY_IMAGE_TO_CLIPBOARD'
   | 'SELECTION_ACTION_REQUEST'
@@ -452,6 +461,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       baseUrl: '',
       apiKey: '',
       modelId: '',
+      apiProtocol: 'auto',
       maxTokens: 8192,
       temperature: 0.7,
       supportsStreaming: true,
@@ -462,6 +472,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       baseUrl: '',
       apiKey: '',
       modelId: 'gpt-image-2',
+      apiProtocol: 'auto',
       maxTokens: 1024,
       temperature: 1.0,
       supportsStreaming: false,

@@ -2,11 +2,17 @@
 // Storage Utility - Chrome extension storage wrapper
 // ============================================================
 
-import { AppSettings, DEFAULT_SETTINGS, DEFAULT_QUICK_PROMPTS, ModelConfig } from '../types/index';
+import { AppSettings, DEFAULT_SETTINGS, DEFAULT_QUICK_PROMPTS, ModelApiProtocol, ModelConfig } from '../types/index';
 
 const SETTINGS_KEY = 'doc_copilot_settings';
 const LEGACY_DEFAULT_BASE_URL_HASHES = new Set(['3232b486', '18f6277', 'f7f9def1']);
 const LEGACY_DEFAULT_MODEL_ID_HASHES = new Set(['6a72156', 'e25a8c25', 'ee928742', '9618e172', '19225768']);
+const MODEL_API_PROTOCOLS = new Set<ModelApiProtocol>([
+  'auto',
+  'anthropic-messages',
+  'openai-chat-completions',
+  'openai-responses',
+]);
 
 const LEGACY_DEFAULT_QUICK_PROMPTS = new Set([
   'optimize|优化选中内容|优化',
@@ -289,6 +295,9 @@ export class SettingsStorage {
       } else if (val !== undefined && val !== null) {
         (merged as any)[key] = val;
       }
+    }
+    if (!MODEL_API_PROTOCOLS.has(merged.apiProtocol)) {
+      merged.apiProtocol = defaults.apiProtocol;
     }
     return merged;
   }

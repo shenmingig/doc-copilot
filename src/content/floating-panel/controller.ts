@@ -4,7 +4,7 @@
 
 import { ChromeDocumentAdapter } from '../../adapters/chrome/adapter';
 import { ISiteAdapter } from '../../adapters/sites/types';
-import { AppSettings, AgentMessage, ChatHistorySession, ChatImageInput, DEFAULT_SETTINGS, ModelRole, ExtensionMessage, PinnedReference, DocumentReferenceBinding, ReferenceContext, isAiConfigured, isModelConfigComplete } from '../../shared/types/index';
+import { AppSettings, AgentMessage, ChatHistorySession, ChatImageInput, DEFAULT_SETTINGS, ModelConfig, ModelRole, ExtensionMessage, PinnedReference, DocumentReferenceBinding, ReferenceContext, isAiConfigured, isModelConfigComplete } from '../../shared/types/index';
 import { settingsStorage } from '../../shared/storage/settings';
 import { renderMarkdown, getLogEntries, clearLogEntries, escapeHtml } from '../../shared/utils/index';
 
@@ -17,6 +17,7 @@ export class FloatingPanelController {
   // DOM
   private bubble: HTMLElement | null = null;
   private panel: HTMLElement | null = null;
+  private imageLightbox: HTMLElement | null = null;
   private host: HTMLElement | null = null;
   private printStyle: HTMLStyleElement | null = null;
 
@@ -38,6 +39,7 @@ export class FloatingPanelController {
   private pageKey = this.computePageKey();
   private currentSessionId = this.generateSessionId();
   private historySessions: ChatHistorySession[] = [];
+  private historySaveTimer: ReturnType<typeof setTimeout> | null = null;
   private isHistoryOpen = false;
   private isFunctionMenuOpen = false;
   private pinnedReferences: PinnedReference[] = [];
@@ -826,14 +828,9 @@ export class FloatingPanelController {
       this.isWaitingResponse = true;
       this.showTypingIndicator({ forceScroll: true });
       this.startChatRequestWatchdog();
+      this.saveCurrentHistory();
 
       try {
-        const imagePrompt = this.extractImageGenerationPrompt(text);
-        if (imagePrompt !== null) {
-          await this.generateImageFromPrompt(imagePrompt);
-          return;
-        }
-
         const context = this.getPageContext();
         if (context) {
           context.documentImages = this.mergeCurrentDocumentImages(context.documentImages);
@@ -990,6 +987,7 @@ export class FloatingPanelController {
       </div>
     `;
     if (!isUser && msg.thinking) this.bindThinkingToggle(bubble);
+    this.bindMessageImageActions(bubble, msg.images);
 
     messagesEl.appendChild(bubble);
     if (shouldAutoScroll) this.scrollChatToBottom(messagesEl);
@@ -1044,6 +1042,7 @@ export class FloatingPanelController {
     this.finalizeStreamingAssistant(undefined, readable);
     this.activeAgentStream = null;
     this.isWaitingResponse = false;
+    this.saveCurrentHistory();
     this.updateUsageDisplay();
   }
 
@@ -1085,6 +1084,7 @@ export class FloatingPanelController {
     }
     this.activeAgentStream.hadChunks = true;
     this.activeAgentStream.content = fullText;
+    this.scheduleHistorySave();
 
     const bubble = indicator?.querySelector('.dc-msg-bubble') as HTMLElement | null;
     if (!indicator || !bubble) return;
@@ -1094,6 +1094,7 @@ export class FloatingPanelController {
   }
 
   private finalizeStreamingAssistant(response?: AgentMessage, error?: string): void {
+    this.stopImageProgress();
     const stream = this.activeAgentStream;
     const indicator = this.panel?.querySelector('.dc-typing-indicator') as HTMLElement | null;
     const bubble = indicator?.querySelector('.dc-msg-bubble') as HTMLElement | null;
@@ -1200,92 +1201,6 @@ export class FloatingPanelController {
     return renderMarkdown(content);
   }
 
-  private extractImageGenerationPrompt(text: string): string | null {
-    const trimmed = text.trim();
-    if (!trimmed) return null;
-
-    const commandOnly = /^(?:\/(?:image|img)|生图|画图|生成图片|帮我画|帮我生成图片|draw|generate image)\s*[:：]?\s*$/i;
-    if (commandOnly.test(trimmed)) return '';
-
-    const commandWithPrompt = /^(?:\/(?:image|img)|生图|画图|生成图片|帮我画|帮我生成图片|draw|generate image)(?:\s*[:：]\s*|\s+)([\s\S]+)$/i;
-    const directMatch = commandWithPrompt.exec(trimmed);
-    if (directMatch) return directMatch[1].trim();
-
-    const naturalMatch = /^(?:请)?(?:帮我)?(?:生成|画)(?:一张|一个|个)?图片(?:\s*[:：]\s*|\s+)([\s\S]+)$/i.exec(trimmed);
-    return naturalMatch ? naturalMatch[1].trim() : null;
-  }
-
-  private async generateImageFromPrompt(prompt: string): Promise<void> {
-    const messagesEl = this.panel?.querySelector('.dc-chat-messages') as HTMLElement | null;
-    if (!prompt) {
-      this.stopImageProgress();
-      this.hideTypingIndicator();
-      this.isWaitingResponse = false;
-      this.activeAgentStream = null;
-      this.addChatMessage({
-        id: this.generateSessionId(),
-        role: 'assistant',
-        content: '请在“生图：”后面写清楚图片描述。',
-        timestamp: Date.now(),
-      });
-      return;
-    }
-
-    try {
-      this.startImageProgress('正在提交图像请求');
-      const response = await chrome.runtime.sendMessage({
-        type: 'IMAGE_GENERATE_REQUEST',
-        payload: { prompt },
-      });
-      this.stopImageProgress();
-      this.hideTypingIndicator();
-      this.isWaitingResponse = false;
-      this.activeAgentStream = null;
-
-      if (response?.error) {
-        this.addChatMessage({
-          id: this.generateSessionId(),
-          role: 'assistant',
-          content: `⚠️ ${response.error}`,
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const imageUrl = response?.url as string | undefined;
-      if (!imageUrl) throw new Error('生图接口没有返回图片');
-      const isDataUrl = imageUrl.startsWith('data:');
-      this.addChatMessage({
-        id: this.generateSessionId(),
-        role: 'assistant',
-        content: '已生成图片。',
-        timestamp: Date.now(),
-        images: [{
-          id: this.generateSessionId(),
-          name: '生成图片',
-          mimeType: isDataUrl ? this.guessImageMimeType(imageUrl) : this.guessImageMimeType(imageUrl),
-          dataUrl: imageUrl,
-          sourceUrl: isDataUrl ? undefined : imageUrl,
-          origin: 'generated',
-        }],
-      }, { forceScroll: true });
-      this.saveCurrentHistory();
-      this.updateUsageDisplay();
-      if (messagesEl) this.scrollChatToBottom(messagesEl);
-    } catch (error) {
-      this.stopImageProgress();
-      this.hideTypingIndicator();
-      this.isWaitingResponse = false;
-      this.activeAgentStream = null;
-      this.addChatMessage({
-        id: this.generateSessionId(),
-        role: 'assistant',
-        content: `⚠️ ${(error as Error).message}`,
-        timestamp: Date.now(),
-      });
-    }
-  }
-
   private startImageProgress(initialStatus: string): void {
     this.stopImageProgress();
     this.imageProgressStartedAt = Date.now();
@@ -1293,7 +1208,7 @@ export class FloatingPanelController {
     this.imageProgressTimer = setInterval(() => {
       const elapsedSeconds = Math.max(0, Math.floor((Date.now() - this.imageProgressStartedAt) / 1000));
       const stage = elapsedSeconds < 10
-        ? '正在提交图像请求'
+        ? '正在调用图像模型'
         : elapsedSeconds < 30
           ? '图像模型正在生成'
           : elapsedSeconds < 60
@@ -1681,8 +1596,125 @@ export class FloatingPanelController {
     ) ?? [];
     if (!visibleImages.length) return '';
     return `<div class="dc-msg-images">${visibleImages.map(image => `
-      <img src="${image.previewUrl || image.dataUrl || image.sourceUrl}" alt="${escapeHtml(image.name || 'uploaded image')}" class="dc-msg-image" />
+      <div class="dc-msg-image-item">
+        <button class="dc-msg-image-open" type="button" title="点击放大" aria-label="放大图片">
+          <img src="${escapeHtml(image.previewUrl || image.dataUrl || image.sourceUrl || '')}" alt="${escapeHtml(image.name || '图片')}" class="dc-msg-image" />
+        </button>
+        <button class="dc-msg-image-copy" type="button" title="复制图片" aria-label="复制图片">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="5.2" y="5.2" width="8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.3"/>
+            <path d="M10.5 5.1V3.6A1.6 1.6 0 008.9 2H3.6A1.6 1.6 0 002 3.6v5.3a1.6 1.6 0 001.6 1.6h1.5" stroke="currentColor" stroke-width="1.3"/>
+          </svg>
+        </button>
+      </div>
     `).join('')}</div>`;
+  }
+
+  private bindMessageImageActions(root: ParentNode, images?: ChatImageInput[]): void {
+    const visibleImages = images?.filter(image =>
+      image.origin !== 'document' && Boolean(image.previewUrl || image.dataUrl || image.sourceUrl),
+    ) ?? [];
+
+    root.querySelectorAll<HTMLButtonElement>('.dc-msg-image-open').forEach((button, index) => {
+      const image = visibleImages[index];
+      if (!image) return;
+      button.addEventListener('click', () => {
+        this.openImagePreview(image.previewUrl || image.dataUrl || image.sourceUrl || '', image.name || '图片');
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>('.dc-msg-image-copy').forEach((button, index) => {
+      const image = visibleImages[index];
+      if (!image) return;
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        void this.copyMessageImage(image, button);
+      });
+    });
+  }
+
+  private async copyMessageImage(image: ChatImageInput, button: HTMLButtonElement): Promise<void> {
+    button.disabled = true;
+    const originalTitle = image.name ? `复制图片：${image.name}` : '复制图片';
+    button.title = '正在复制…';
+
+    try {
+      let dataUrl = image.dataUrl || image.sourceUrl || image.previewUrl || '';
+      if (!dataUrl.startsWith('data:image/')) {
+        const fetched = await chrome.runtime.sendMessage({
+          type: 'FETCH_IMAGE_DATA_URL',
+          payload: { url: dataUrl },
+        }) as { dataUrl?: string; error?: string } | undefined;
+        if (!fetched?.dataUrl) throw new Error(fetched?.error || '无法读取图片数据');
+        dataUrl = fetched.dataUrl;
+      }
+
+      const copied = await chrome.runtime.sendMessage({
+        type: 'COPY_IMAGE_TO_CLIPBOARD',
+        payload: { dataUrl },
+      }) as { ok?: boolean; error?: string } | undefined;
+      if (!copied?.ok) throw new Error(copied?.error || '复制失败');
+
+      button.title = '已复制图片';
+      button.classList.add('dc-msg-image-copy-done');
+    } catch (error) {
+      button.title = `复制失败：${(error as Error).message}`;
+      button.classList.add('dc-msg-image-copy-error');
+    } finally {
+      button.disabled = false;
+      window.setTimeout(() => {
+        button.title = originalTitle;
+        button.classList.remove('dc-msg-image-copy-done', 'dc-msg-image-copy-error');
+      }, 1800);
+    }
+  }
+
+  private openImagePreview(src: string, alt: string): void {
+    if (!src) return;
+    if (!this.imageLightbox) {
+      const lightbox = document.createElement('div');
+      lightbox.className = 'dc-image-lightbox';
+      lightbox.hidden = true;
+      lightbox.setAttribute('role', 'dialog');
+      lightbox.setAttribute('aria-modal', 'true');
+      lightbox.setAttribute('aria-label', '图片预览');
+      lightbox.innerHTML = `
+        <button class="dc-image-lightbox-close" type="button" title="关闭图片预览" aria-label="关闭图片预览">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path d="M3 3l12 12M15 3L3 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <img class="dc-image-lightbox-image" alt="" />
+      `;
+      lightbox.addEventListener('click', event => {
+        if (event.target === lightbox || (event.target as HTMLElement).closest('.dc-image-lightbox-close')) {
+          this.closeImagePreview();
+        }
+      });
+      document.addEventListener('keydown', this.onImageLightboxKeyDown);
+      this.host?.appendChild(lightbox);
+      this.imageLightbox = lightbox;
+    }
+
+    const previewImage = this.imageLightbox.querySelector('.dc-image-lightbox-image') as HTMLImageElement | null;
+    if (!previewImage) return;
+    previewImage.src = src;
+    previewImage.alt = alt;
+    this.imageLightbox.hidden = false;
+    (this.imageLightbox.querySelector('.dc-image-lightbox-close') as HTMLButtonElement | null)?.focus();
+  }
+
+  private onImageLightboxKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && this.imageLightbox && !this.imageLightbox.hidden) {
+      this.closeImagePreview();
+    }
+  };
+
+  private closeImagePreview(): void {
+    if (!this.imageLightbox) return;
+    this.imageLightbox.hidden = true;
+    const image = this.imageLightbox.querySelector('.dc-image-lightbox-image') as HTMLImageElement | null;
+    if (image) image.src = '';
   }
 
   // ================================================================
@@ -1989,6 +2021,9 @@ export class FloatingPanelController {
     const latestPageKey = this.computePageKey();
     if (latestPageKey === this.pageKey) return;
 
+    this.saveCurrentHistory();
+    if (this.historySaveTimer) clearTimeout(this.historySaveTimer);
+    this.historySaveTimer = null;
     this.pageKey = latestPageKey;
     this.currentSessionId = this.generateSessionId();
     this.historySessions = [];
@@ -2022,6 +2057,7 @@ export class FloatingPanelController {
 
   private async initializeHistoryPanel(): Promise<void> {
     try {
+      await this.settingsReady;
       await chrome.runtime.sendMessage({ type: 'HISTORY_CLEANUP_EXPIRED', payload: {} });
       await this.loadHistorySessions();
     } catch (error) {
@@ -2125,6 +2161,7 @@ export class FloatingPanelController {
     for (const msg of messages) this.addChatMessage(msg, { forceScroll: false });
     if (messagesEl) this.scrollChatToBottom(messagesEl);
     this.closeHistoryDrawer();
+    this.saveCurrentHistory();
   }
 
   private async deleteHistorySession(sessionId: string): Promise<void> {
@@ -2143,6 +2180,8 @@ export class FloatingPanelController {
   }
 
   private saveCurrentHistory(): void {
+    if (this.historySaveTimer) clearTimeout(this.historySaveTimer);
+    this.historySaveTimer = null;
     if (!this.settings.chatHistoryEnabled) return;
     const messages = this.getPersistableChatMessages();
     if (!messages.length) return;
@@ -2161,8 +2200,17 @@ export class FloatingPanelController {
     }).catch(error => console.warn('[Doc Copilot] Failed to save chat history:', error));
   }
 
+  private scheduleHistorySave(): void {
+    if (!this.settings.chatHistoryEnabled || !this.isWaitingResponse) return;
+    if (this.historySaveTimer) clearTimeout(this.historySaveTimer);
+    this.historySaveTimer = setTimeout(() => {
+      this.historySaveTimer = null;
+      this.saveCurrentHistory();
+    }, 900);
+  }
+
   private getPersistableChatMessages(): AgentMessage[] {
-    return this.chatMessages
+    const messages: AgentMessage[] = this.chatMessages
       .filter(msg => !msg.isStreaming && (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'tool'))
       .map(msg => ({
         id: msg.id || this.generateSessionId(),
@@ -2172,18 +2220,31 @@ export class FloatingPanelController {
         toolName: msg.toolName,
         thinking: msg.thinking,
         images: msg.images
-          ?.filter(image => this.isSupportedModelImage(image, image.origin === 'upload' ? 'upload' : 'document'))
+          ?.filter(image => this.isSupportedModelImage(image, image.origin === 'document' ? 'document' : 'upload'))
           .map(image => ({
             id: image.id,
             name: image.name,
             mimeType: image.mimeType,
-            dataUrl: '',
+            dataUrl: image.origin === 'generated' ? image.dataUrl : '',
             sourceUrl: image.sourceUrl && !image.sourceUrl.startsWith('data:') ? image.sourceUrl : '',
             width: image.width,
             height: image.height,
             origin: image.origin,
           })),
       }));
+
+    const stream = this.activeAgentStream;
+    if (this.isWaitingResponse && !stream?.finalized) {
+      messages.push({
+        id: `${this.currentSessionId}-interrupted-response`,
+        role: 'assistant',
+        content: stream?.content
+          ? `${stream.content}\n\n[回复在页面刷新前中断]`
+          : '请求正在处理；如果页面刷新导致请求中断，请重新发送。',
+        timestamp: Date.now(),
+      });
+    }
+    return messages;
   }
 
   private getModelChatHistory(): AgentMessage[] {
@@ -2371,7 +2432,7 @@ export class FloatingPanelController {
         <div class="dc-setup-guide" data-setup-guide>
           <div class="dc-setup-guide-title">完成 AI 服务配置</div>
           <div class="dc-setup-guide-text">
-            Doc Copilot 不再内置 API URL 或 SK。Claude 只请求 /messages，不会自动加 /v1；GPT 和 Grok 会请求 /v1/chat/completions。其他模型优先走 /v1。像 OneAPI 这种网关，不带 /v1 的 /responses 只是登录页，不会再拿它当成模型错误。Base URL 填到服务根地址即可。
+            Doc Copilot 不再内置 API URL 或 SK。文本 API 协议可按服务配置选择 Anthropic Messages、OpenAI Chat Completions 或 OpenAI Responses；自动模式会按 Model ID 和 Base URL 推断。Base URL 通常填服务根地址。
           </div>
         </div>
 
@@ -2380,6 +2441,8 @@ export class FloatingPanelController {
           <div class="dc-field"><label>API Base URL</label><input type="url" class="dc-input" data-model-field="baseUrl" placeholder="https://your-api.example.com" /></div>
           <div class="dc-field"><label>API Key / SK</label><input type="password" class="dc-input" data-model-field="apiKey" placeholder="sk-..." /></div>
           <div class="dc-field"><label>Model ID</label><input type="text" class="dc-input" data-model-field="modelId" placeholder="model-id" /></div>
+          <div class="dc-field"><label>文本 API 协议</label><select class="dc-input" data-model-field="apiProtocol"><option value="auto">自动</option><option value="anthropic-messages">Anthropic Messages</option><option value="openai-chat-completions">OpenAI Chat Completions</option><option value="openai-responses">OpenAI Responses</option></select></div>
+          <div class="dc-settings-note">如果普通 Chat 可用但 Agent 工具调用失败，可手动选择网关支持的协议。自动模式根据 Model ID 和 Base URL 选择。</div>
           <label class="dc-toggle"><input type="checkbox" data-feature="autocomplete" /><span>开启自动补全</span></label>
           <label class="dc-toggle"><input type="checkbox" data-feature="selectionToolbar" /><span>开启选中文本悬浮框</span></label>
           <div class="dc-shortcut-row">
@@ -2390,7 +2453,7 @@ export class FloatingPanelController {
 
         <div class="dc-settings-section" data-model-role="image">
           <div class="dc-settings-heading">图像模型（可选）</div>
-          <div class="dc-settings-note">留空则复用上面的 API Base URL 和 API Key。默认模型是 gpt-image-2，优先请求 /images/generations。网关如果返回 not implemented，会自动改走对话接口生图。Gemini 等模型请填写网关里的图像模型 ID，例如 gemini-2.5-flash-image。</div>
+          <div class="dc-settings-note">Agent 会根据当前对话和文档需要调用图像模型，文本模型负责理解内容并拟定画面描述。留空则复用上面的 API Base URL 和 API Key。默认模型是 gpt-image-2，优先请求 /images/generations；网关不支持时会尝试对话接口。Gemini 等模型请填写网关里的图像模型 ID，例如 gemini-2.5-flash-image。</div>
           <div class="dc-field"><label>Image API Base URL</label><input type="url" class="dc-input" data-model-field="baseUrl" placeholder="留空则复用通用配置" /></div>
           <div class="dc-field"><label>Image API Key / SK</label><input type="password" class="dc-input" data-model-field="apiKey" placeholder="留空则复用通用配置" /></div>
           <div class="dc-field"><label>Image Model ID</label><input type="text" class="dc-input" data-model-field="modelId" placeholder="gpt-image-2" /></div>
@@ -2487,7 +2550,7 @@ export class FloatingPanelController {
       const config = this.settings.models[role];
       this.panel.querySelectorAll<HTMLElement>(`[data-model-role="${role}"]`).forEach(section => {
         for (const [field, value] of Object.entries(config)) {
-          section.querySelectorAll<HTMLInputElement>(`[data-model-field="${field}"]`).forEach(input => {
+          section.querySelectorAll<HTMLInputElement | HTMLSelectElement>(`[data-model-field="${field}"]`).forEach(input => {
             input.value = String(value);
           });
         }
@@ -2566,9 +2629,19 @@ export class FloatingPanelController {
       this.panel.querySelectorAll<HTMLElement>(`[data-model-role="${role}"]`).forEach(section => {
         section.querySelectorAll('[data-model-field]').forEach(input => {
           const field = (input as HTMLElement).dataset.modelField!;
-          const value = (input as HTMLInputElement).value.trim();
+          const value = (input as HTMLInputElement | HTMLSelectElement).value.trim();
           if (field === 'baseUrl' || field === 'apiKey' || field === 'modelId') {
             (this.settings.models[role] as any)[field] = value;
+          } else if (field === 'apiProtocol') {
+            const supported: ModelConfig['apiProtocol'][] = [
+              'auto',
+              'anthropic-messages',
+              'openai-chat-completions',
+              'openai-responses',
+            ];
+            if (supported.includes(value as ModelConfig['apiProtocol'])) {
+              this.settings.models[role].apiProtocol = value as ModelConfig['apiProtocol'];
+            }
           } else if (field === 'maxTokens') {
             const parsed = parseInt(value, 10);
             if (Number.isFinite(parsed) && parsed > 0) (this.settings.models[role] as any)[field] = parsed;
@@ -2684,7 +2757,11 @@ export class FloatingPanelController {
       }
       if (message.type === 'TOOL_STATUS' && this.isWaitingResponse) {
         const { status, thinkingText, expanded } = (message.payload as { status: string; thinkingText?: string; expanded?: boolean });
-        if (status) this.updateTypingStatus(status, thinkingText, expanded === true);
+        if (/图像模型/.test(status)) this.startImageProgress(status);
+        else {
+          this.stopImageProgress();
+          if (status) this.updateTypingStatus(status, thinkingText, expanded === true);
+        }
       }
       if (message.type === 'HIDE_FOR_PRINT') {
         this.prepareForPrint()

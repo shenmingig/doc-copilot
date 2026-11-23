@@ -13,10 +13,13 @@ import {
   StreamChunk,
   ChatMessage,
   ToolCall,
+  ToolChoice,
 } from '../../shared/types/index';
 import { settingsStorage } from '../../shared/storage/settings';
 import { chatContentToText } from '../../shared/utils/index';
 import { debugLog, safeUrl, summarizeApiBody } from '../../shared/debug-log';
+import { resolveTextProtocolRouting } from './text-protocol';
+import { toResponsesInput } from './responses-input';
 
 /** 可重试的状态码 */
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -484,7 +487,9 @@ export class ModelProvider {
           return data;
         } catch (error) {
           lastError = rememberError(lastError, normalizeRequestError(error).message);
-          if (plan.claudeOnly) throw new Error(lastError || 'Messages API 请求失败。');
+          if (plan.anthropicOnly || (plan.lockedProtocol && config.apiProtocol === 'anthropic-messages')) {
+            throw new Error(lastError || 'Messages API 请求失败。');
+          }
         }
       }
 
@@ -527,7 +532,7 @@ export class ModelProvider {
         }
       }
 
-      if (!preferMessages && !plan.openAiV1Only) {
+      if (!preferMessages && !plan.openAiV1Only && !plan.lockedProtocol) {
         try {
           const data = await this.requestMessagesCompletion(
             config,
@@ -544,6 +549,10 @@ export class ModelProvider {
         } catch (error) {
           lastError = rememberError(lastError, normalizeRequestError(error).message);
         }
+      }
+
+      if (plan.lockedProtocol && !plan.responsesOnly) {
+        throw new Error(lastError || `请求失败：所选协议为 ${plan.protocol}。`);
       }
 
       try {
@@ -608,7 +617,9 @@ export class ModelProvider {
         );
         if (messagesResult.started) return;
         lastError = rememberError(lastError, messagesResult.error);
-        if (plan.claudeOnly) throw new Error(lastError || 'Messages API 请求失败。');
+        if (plan.anthropicOnly || (plan.lockedProtocol && config.apiProtocol === 'anthropic-messages')) {
+          throw new Error(lastError || 'Messages API 请求失败。');
+        }
       }
 
       for (const endpoint of plan.chatEndpoints) {
@@ -705,7 +716,7 @@ export class ModelProvider {
         }
       }
 
-      if (!preferMessages && !plan.openAiV1Only) {
+      if (!preferMessages && !plan.openAiV1Only && !plan.lockedProtocol) {
         const messagesResult = yield* this.pipeMessagesStream(
           config,
           messages,
@@ -717,6 +728,10 @@ export class ModelProvider {
         );
         if (messagesResult.started) return;
         if (messagesResult.error) lastError = rememberError(lastError, messagesResult.error);
+      }
+
+      if (plan.lockedProtocol && !plan.responsesOnly) {
+        throw new Error(lastError || `请求失败：所选协议为 ${plan.protocol}。`);
       }
 
       try {
@@ -878,39 +893,44 @@ export class ModelProvider {
     };
   }
 
-  private resolveBuiltinTextProtocol(modelId: string): 'anthropic-messages' | 'openai-v1' | 'compatible' {
-    const id = modelId.trim().toLowerCase();
-    if (!id) return 'compatible';
-    if (id.includes('claude')) return 'anthropic-messages';
-    if (id.includes('gpt') || id.includes('grok') || /(?:^|[/:._-])o[1-4](?:$|[/:._-])/.test(id)) {
-      return 'openai-v1';
-    }
-    return 'compatible';
-  }
-
   private textRequestPlan(config: ModelConfig): {
-    claudeOnly: boolean;
+    lockedProtocol: boolean;
+    protocol: 'anthropic-messages' | 'openai-chat-completions' | 'openai-responses' | 'compatible';
+    anthropicOnly: boolean;
     openAiV1Only: boolean;
     preferMessages: boolean;
+    responsesOnly: boolean;
     messagesEndpoints?: string[];
     chatEndpoints: string[];
     responsesEndpoints?: string[];
   } {
-    const protocol = this.resolveBuiltinTextProtocol(config.modelId);
-    const claudeOnly = protocol === 'anthropic-messages';
-    const openAiV1Only = protocol === 'openai-v1';
-    const openAiRoot = openAiV1Only ? this.openAiV1Root(config.baseUrl) : '';
+    const route = resolveTextProtocolRouting(config.modelId, config.baseUrl, config.apiProtocol);
+    const openAiV1Only = route.openAiV1Only;
+    const openAiRoot = this.openAiV1Root(config.baseUrl);
+    const lockedChatEndpoints = route.protocol === 'openai-chat-completions'
+      && config.apiProtocol !== 'auto'
+      ? this.getChatCompletionEndpointCandidates(config.baseUrl)
+      : [`${openAiRoot}/chat/completions`];
     return {
-      claudeOnly,
+      lockedProtocol: route.locked,
+      protocol: route.protocol,
+      anthropicOnly: route.anthropicOnly,
       openAiV1Only,
-      preferMessages: claudeOnly || (!openAiV1Only && this.prefersMessagesProtocol(config.baseUrl)),
-      messagesEndpoints: claudeOnly ? this.claudeMessagesEndpointCandidates(config.baseUrl) : undefined,
-      chatEndpoints: claudeOnly
+      preferMessages: route.preferMessages,
+      responsesOnly: route.responsesOnly,
+      messagesEndpoints: route.preferMessages
+        ? this.claudeMessagesEndpointCandidates(config.baseUrl)
+        : undefined,
+      chatEndpoints: route.anthropicOnly || route.responsesOnly
         ? []
         : openAiV1Only
-          ? [`${openAiRoot}/chat/completions`]
+          ? lockedChatEndpoints
           : this.getChatCompletionEndpointCandidates(config.baseUrl),
-      responsesEndpoints: openAiV1Only ? [`${openAiRoot}/responses`] : undefined,
+      responsesEndpoints: route.responsesOnly
+        ? this.getResponsesEndpointCandidates(config.baseUrl)
+        : config.apiProtocol === 'auto' && openAiV1Only
+          ? [`${openAiRoot}/responses`]
+          : undefined,
     };
   }
 
@@ -935,10 +955,6 @@ export class ModelProvider {
   private openAiV1Root(baseUrl: string): string {
     const root = this.stripKnownApiSuffix(baseUrl);
     return /\/v1$/i.test(root) ? root : `${root}/v1`;
-  }
-
-  private prefersMessagesProtocol(baseUrl: string): boolean {
-    return /\/messages$/i.test(baseUrl.trim().replace(/\/+$/, ''));
   }
 
   private getMessagesEndpointCandidates(baseUrl: string): string[] {
@@ -974,8 +990,9 @@ export class ModelProvider {
     tools?: object[],
     stop?: string[],
     endpoints?: string[],
+    toolChoice?: ToolChoice,
   ): Promise<CompletionResponse> {
-    const body = this.buildAnthropicBody(config, messages, maxTokens, temperature, false, tools, stop);
+    const body = this.buildAnthropicBody(config, messages, maxTokens, temperature, false, tools, stop, toolChoice);
     let lastError = '';
 
     for (const endpoint of endpoints ?? this.getMessagesEndpointCandidates(config.baseUrl)) {
@@ -1208,6 +1225,7 @@ export class ModelProvider {
     stream: boolean,
     tools?: object[],
     stop?: string[],
+    toolChoice?: ToolChoice,
   ): Record<string, unknown> {
     const converted = this.toAnthropicMessages(messages);
     const body: Record<string, unknown> = {
@@ -1221,9 +1239,24 @@ export class ModelProvider {
     if (stop?.length) body.stop_sequences = stop;
     if (tools?.length) {
       body.tools = this.toolsToAnthropicFormat(tools);
-      body.tool_choice = { type: 'auto' };
+      body.tool_choice = this.toAnthropicToolChoice(toolChoice);
     }
     return body;
+  }
+
+  private toAnthropicToolChoice(choice?: ToolChoice): object {
+    if (!choice || choice === 'auto') return { type: 'auto' };
+    if (choice === 'required') return { type: 'any' };
+    if (choice === 'none') return { type: 'auto' };
+    if (choice.type === 'function') return { type: 'tool', name: choice.function.name };
+    return { type: 'auto' };
+  }
+
+  private toResponsesToolChoice(choice?: ToolChoice): string | object {
+    if (!choice) return 'auto';
+    if (typeof choice === 'string') return choice;
+    if (choice.type === 'function') return { type: 'function', name: choice.function.name };
+    return 'auto';
   }
 
   private toAnthropicMessages(messages: ChatMessage[]): {
@@ -1467,12 +1500,14 @@ export class ModelProvider {
     signal: AbortSignal,
     tools?: object[],
     endpoints?: string[],
+    toolChoice?: ToolChoice,
   ): Promise<CompletionResponse> {
     const body = {
       model: config.modelId,
-      input: this.messagesToResponsesInput(messages),
+      input: toResponsesInput(messages),
       max_output_tokens: maxOutputTokens ?? config.maxTokens,
       ...(tools?.length ? { tools: this.toolsToResponsesFormat(tools) } : {}),
+      ...(tools?.length && toolChoice ? { tool_choice: this.toResponsesToolChoice(toolChoice) } : {}),
     };
     let lastError = '';
 
@@ -1510,17 +1545,6 @@ export class ModelProvider {
       }
     }
     throw new Error(lastError || 'Responses API 请求失败。');
-  }
-
-  private messagesToResponsesInput(messages: ChatMessage[]): string {
-    return messages.map(message => {
-      const role = message.role.toUpperCase();
-      const text = chatContentToText(message.content);
-      const imageNotes = Array.isArray(message.content)
-        ? message.content.filter(part => part.type === 'image_url').map(part => `[图片: ${part.image_url?.url || ''}]`).join('\n')
-        : '';
-      return `[${role}]\n${[text, imageNotes].filter(Boolean).join('\n')}`;
-    }).join('\n\n');
   }
 
   private responsesToCompletion(raw: Record<string, unknown>): CompletionResponse {
@@ -1616,7 +1640,7 @@ export class ModelProvider {
         max_tokens: options.max_tokens ?? config.maxTokens,
         stream: false,
         tools,
-        tool_choice: 'auto',
+        tool_choice: options.tool_choice ?? 'auto',
       };
 
       let lastError = '';
@@ -1635,12 +1659,15 @@ export class ModelProvider {
             tools,
             options.stop,
             plan.messagesEndpoints,
+            options.tool_choice,
           );
           await this.trackUsage(role, data);
           return this.completionToToolResult(data);
         } catch (error) {
           lastError = rememberError(lastError, normalizeRequestError(error).message);
-          if (plan.claudeOnly) throw new Error(lastError || 'Messages API 请求失败。');
+          if (plan.anthropicOnly || (plan.lockedProtocol && config.apiProtocol === 'anthropic-messages')) {
+            throw new Error(lastError || 'Messages API 请求失败。');
+          }
         }
       }
 
@@ -1683,7 +1710,7 @@ export class ModelProvider {
         }
       }
 
-      if (!preferMessages && !plan.openAiV1Only) {
+      if (!preferMessages && !plan.openAiV1Only && !plan.lockedProtocol) {
         try {
           const data = await this.requestMessagesCompletion(
             config,
@@ -1694,12 +1721,17 @@ export class ModelProvider {
             tools,
             options.stop,
             plan.messagesEndpoints,
+            options.tool_choice,
           );
           await this.trackUsage(role, data);
           return this.completionToToolResult(data);
         } catch (error) {
           lastError = rememberError(lastError, normalizeRequestError(error).message);
         }
+      }
+
+      if (plan.lockedProtocol && !plan.responsesOnly) {
+        throw new Error(lastError || `请求失败：所选协议为 ${plan.protocol}。`);
       }
 
       try {
@@ -1710,6 +1742,7 @@ export class ModelProvider {
           controller.signal,
           tools,
           plan.responsesEndpoints,
+          options.tool_choice,
         );
         await this.trackUsage(role, data);
         const choice = data.choices[0];

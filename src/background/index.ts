@@ -132,9 +132,6 @@ async function handleMessage(message: ExtensionMessage, tabId?: number): Promise
       return { ok: true };
     }
 
-    case 'IMAGE_GENERATE_REQUEST':
-      return handleImageGenerate(message.payload as { prompt: string; size?: string });
-
     case 'FETCH_IMAGE_DATA_URL':
       return handleFetchImageDataUrl(message.payload as { url: string });
 
@@ -443,15 +440,6 @@ async function handleAgentMessage(payload: {
     const message = (error as Error).message;
     pushEnd({ error: message, streamed: didStream });
     return { error: message, streamed: didStream };
-  }
-}
-
-async function handleImageGenerate(payload: { prompt: string; size?: string }) {
-  try {
-    const url = await modelProvider.generateImage(payload.prompt, { size: payload.size });
-    return { url };
-  } catch (error) {
-    return { error: (error as Error).message };
   }
 }
 
