@@ -42,6 +42,11 @@ function copyStaticPlugin() {
 
 function makeConfig(entry: string, outName: string, emptyOut: boolean, withCopy: boolean) {
   return defineConfig({
+    // Chrome rejects content scripts that contain Unicode noncharacters (e.g. the
+    // U+FFFF in KaTeX's lexer regex) as "not UTF-8 encoded". Keep output ASCII-only.
+    esbuild: {
+      charset: 'ascii',
+    },
     build: {
       outDir,
       emptyOutDir: emptyOut,
